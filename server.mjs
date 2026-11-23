@@ -71,6 +71,9 @@ const DATA_DIR = process.env.DATA_DIR ? resolve(root, process.env.DATA_DIR) : nu
 const PROFILES_DIR = DATA_DIR && join(DATA_DIR, 'profiles');
 const IDENTITY_HEADER = (process.env.IDENTITY_HEADER ?? 'remote-user').toLowerCase();
 const DEV_USER = process.env.DEV_USER || null; // développement local uniquement : simule un utilisateur
+// SHARED_ACCESS=1 : pas de comptes Pangolin. Tous les visiteurs partagent le même espace et chaque
+// profil n'est protégé que par son code PIN. L'en-tête d'identité est alors ignoré.
+const SHARED_ACCESS = /^(1|true|yes|oui)$/i.test(process.env.SHARED_ACCESS ?? '');
 const DATA_MAX_BYTES = 5 * 1024 * 1024;
 const LIST_MAX = 20000;
 const PROFILES_MAX = 20;
@@ -79,6 +82,7 @@ const ID_RE = /^p_[a-z0-9]{8,32}$/;
 const writeQueues = new Map(); // une écriture à la fois par profil
 
 function identity(req) {
+  if (SHARED_ACCESS) return DATA_DIR ? { name: 'Famille' } : null;
   const user = req.headers[IDENTITY_HEADER] || DEV_USER;
   if (!user || !DATA_DIR) return null;
   const name = req.headers['remote-name'] || (DEV_USER && !req.headers[IDENTITY_HEADER] ? DEV_USER : String(user).split('@')[0]);
@@ -369,7 +373,7 @@ const tls = process.env.TLS_CERT && process.env.TLS_KEY
 const server = tls ? createHttps(tls, handler) : createHttp(handler);
 server.listen(PORT, HOST, () => {
   if (DIAG_DIR) console.log(`Diagnostics activés → ${DIAG_DIR}`);
-  if (DATA_DIR) console.log(`Profils synchronisés → ${PROFILES_DIR} (accès : en-tête ${IDENTITY_HEADER})`);
+  if (DATA_DIR) console.log(`Profils synchronisés → ${PROFILES_DIR} (accès : ${SHARED_ACCESS ? 'partagé, protégé par les codes PIN' : `en-tête ${IDENTITY_HEADER}`})`);
   if (DEV_USER) console.warn(`⚠️  DEV_USER=${DEV_USER} : toute requête sans identité est attribuée à cet utilisateur (développement uniquement)`);
   console.log(`RepCounter sur ${tls ? 'https' : 'http'}://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
   if (!tls && HOST !== '127.0.0.1' && HOST !== 'localhost') {

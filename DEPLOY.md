@@ -65,7 +65,17 @@ profil) et synchronisées entre appareils. Le tableau de bord est sur `https://<
   donne-lui accès à la ressource ; elle crée son profil depuis la page de choix.
 - Toute personne ayant accès voit tous les profils (pas de mot de passe par profil).
 - Avec un code PIN Pangolin ou sans authentification, l'app ne reçoit pas d'identité et reste en
-  mode « données sur ce téléphone uniquement ».
+  mode « données sur ce téléphone uniquement », sauf en mode partagé (ci-dessous).
+
+### Sans comptes Pangolin (mode partagé)
+Si les personnes n'ont pas de compte Pangolin, ajoute `SHARED_ACCESS=1` aux variables du conteneur.
+Tous les visiteurs voient alors la même page « Qui s'entraîne ? », et **chaque profil n'est protégé
+que par son code PIN**. Le serveur ignore les en-têtes d'identité dans ce mode.
+- Sans authentification Pangolin, n'importe qui connaissant l'adresse voit les prénoms et photos
+  des profils et peut en créer (20 au maximum). Les données restent illisibles sans le code.
+- Pour éviter ça sans créer de comptes, mets un **mot de passe ou un code PIN Pangolin** commun sur
+  la ressource (« Authentication » → désactive le SSO, active « Password » ou « PIN »). Chacun le
+  saisit une fois par appareil.
 - **Ne publie jamais le port 8080** du conteneur : seul Pangolin doit pouvoir le joindre,
   sinon l'en-tête d'identité pourrait être imité.
 - Sauvegarde des profils : `docker cp repcounter:/data/users ./sauvegarde-profils`

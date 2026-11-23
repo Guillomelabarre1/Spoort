@@ -233,3 +233,28 @@ test('serveur : suppression d\'un profil (code exigé, mis à la corbeille)', as
   assert.ok(!list.some((p) => p.id === a));
   assert.equal((await readdir(join(dir, 'trash'))).length, 2); // données + code
 });
+
+test('serveur : SHARED_ACCESS=1 → synchro sans compte Pangolin, protégée par le code', async () => {
+  const shared = await mkdtemp(join(tmpdir(), 'repcounter-shared-'));
+  const port3 = 50000 + Math.floor(Math.random() * 10000);
+  const srv = spawn(process.execPath, ['server.mjs'], {
+    cwd: fileURLToPath(new URL('..', import.meta.url)),
+    env: { ...process.env, PORT: String(port3), HOST: '127.0.0.1', DATA_DIR: shared, DEV_USER: '', SHARED_ACCESS: '1', DATA_SECRET: 'secret-de-test-tres-long' },
+    stdio: 'ignore',
+  });
+  try {
+    const b3 = `http://127.0.0.1:${port3}`;
+    for (let i = 0; i < 50; i++) { try { await http(b3); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
+    const h = { 'Content-Type': 'application/json' };
+    assert.equal((await (await http(`${b3}/api/me`)).json()).sync, true);
+    const { id, token } = await (await http(`${b3}/api/profiles`, { method: 'POST', headers: h, body: JSON.stringify({ name: 'Mathou', pin: '4321' }) })).json();
+    // Un en-tête d'identité imité ne change rien : même espace partagé.
+    const list = await (await http(`${b3}/api/profiles`, { headers: { 'Remote-User': 'pirate' } })).json();
+    assert.deepEqual(list.map((p) => p.name), ['Mathou']);
+    assert.equal((await http(`${b3}/api/profiles/${id}/data`)).status, 401);
+    assert.equal((await http(`${b3}/api/profiles/${id}/data`, { headers: { 'X-Profile-Token': token } })).status, 200);
+  } finally {
+    srv.kill();
+    await rm(shared, { recursive: true, force: true });
+  }
+});

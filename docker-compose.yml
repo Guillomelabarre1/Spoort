@@ -5,6 +5,7 @@
 #   DIAG_DIR            vide = diagnostics désactivés ; /data/diag pour les activer temporairement
 #   DATA_SECRET         clé de chiffrement des profils (≥ 16 caractères, à mettre en « Secret » Dockhand
 #                       et à garder précieusement : sans elle, les données sont illisibles)
+#   SHARED_ACCESS       1 = sans comptes Pangolin : profils protégés uniquement par leur code PIN
 services:
   repcounter:
     build: .
@@ -14,6 +15,7 @@ services:
     environment:
       - DIAG_DIR=${DIAG_DIR:-}
       - DATA_SECRET=${DATA_SECRET:-}
+      - SHARED_ACCESS=${SHARED_ACCESS:-}
     volumes:
       - repcounter-data:/data
     networks:
