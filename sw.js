@@ -1,13 +1,13 @@
 // Service worker : l'app marche hors-ligne une fois chargée.
 // - Interface (html/js/css) : réseau d'abord, pour recevoir les mises à jour ; cache si hors-ligne.
 // - vendor/ (MediaPipe, modèles ~15-30 Mo) : cache d'abord, téléchargé une seule fois.
-const VERSION = 'v5';
+const VERSION = 'v6';
 const SHELL = `repcounter-shell-${VERSION}`;
 const VENDOR = 'repcounter-vendor-v1';
 
 const SHELL_FILES = [
   './', 'index.html', 'css/style.css', 'js/app.js', 'js/counter.js', 'js/voice.js', 'js/stats.js', 'js/exercises.js', 'js/musclemap.js',
-  'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
+  'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable.png', 'icons/favicon-32.png', 'icons/favicon-64.png',
 ];
 
 self.addEventListener('install', (event) => {

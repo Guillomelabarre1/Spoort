@@ -114,5 +114,5 @@ js/musclemap.js               silhouette face / dos de la carte des muscles
 js/voice.js                   synthèse vocale + bips
 sw.js, manifest.webmanifest   PWA / hors-ligne
 server.mjs                    serveur statique (HTTP ou HTTPS)
-scripts/                      récupération de MediaPipe, génération des icônes
+scripts/                      récupération de MediaPipe, icônes (make-icons.sh depuis icons/source.webp)
 ```
