@@ -1,0 +1,36 @@
+# RepCounter derrière Pangolin (déploiement avec Dockhand, voir DEPLOY.md).
+# Variables (panneau « Environment variables » de Dockhand ou fichier .env) :
+#   REPCOUNTER_DOMAIN   domaine public, ex. reps.mondomaine.fr (obligatoire)
+#   PANGOLIN_NETWORK    réseau Docker partagé avec Pangolin / le site Newt (défaut : pangolin)
+#   DIAG_DIR            vide = diagnostics désactivés ; /data/diag pour les activer temporairement
+services:
+  repcounter:
+    build: .
+    image: repcounter:latest
+    container_name: repcounter
+    restart: unless-stopped
+    environment:
+      - DIAG_DIR=${DIAG_DIR:-}
+    volumes:
+      - repcounter-data:/data
+    networks:
+      - pangolin
+    # Pas de port publié : seul Pangolin accède au conteneur, via le réseau partagé.
+    labels:
+      # Déclaration automatique de la ressource (blueprints Pangolin), lue par un connecteur
+      # de site qui a accès au socket Docker. Sans ce connecteur, crée la ressource à la main
+      # dans Pangolin (cible http://repcounter:8080) : ces labels sont alors simplement ignorés.
+      - pangolin.public-resources.repcounter.name=RepCounter
+      - pangolin.public-resources.repcounter.mode=http
+      - pangolin.public-resources.repcounter.full-domain=${REPCOUNTER_DOMAIN:?Renseigne REPCOUNTER_DOMAIN (ex. reps.mondomaine.fr)}
+      - pangolin.public-resources.repcounter.targets[0].method=http
+      - pangolin.public-resources.repcounter.targets[0].hostname=repcounter
+      - pangolin.public-resources.repcounter.targets[0].port=8080
+
+networks:
+  pangolin:
+    external: true
+    name: ${PANGOLIN_NETWORK:-pangolin}
+
+volumes:
+  repcounter-data:
