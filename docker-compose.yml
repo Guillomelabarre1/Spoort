@@ -3,6 +3,8 @@
 #   REPCOUNTER_DOMAIN   domaine public, ex. reps.mondomaine.fr (obligatoire)
 #   PANGOLIN_NETWORK    réseau Docker partagé avec Pangolin / le site Newt (défaut : pangolin)
 #   DIAG_DIR            vide = diagnostics désactivés ; /data/diag pour les activer temporairement
+#   DATA_SECRET         clé de chiffrement des profils (≥ 16 caractères, à mettre en « Secret » Dockhand
+#                       et à garder précieusement : sans elle, les données sont illisibles)
 services:
   repcounter:
     build: .
@@ -11,6 +13,7 @@ services:
     restart: unless-stopped
     environment:
       - DIAG_DIR=${DIAG_DIR:-}
+      - DATA_SECRET=${DATA_SECRET:-}
     volumes:
       - repcounter-data:/data
     networks:

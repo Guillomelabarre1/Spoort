@@ -3,11 +3,14 @@ import { Voice } from './voice.js';
 import { CATEGORIES, MUSCLES, PRESETS, allExercises, makeCustom } from './exercises.js';
 import { lastDays, totals, currentStreak, bestSession, pace, heatLevel, startOfDay, dayKey, filterEx, isHold, muscleVolume } from './stats.js';
 import { muscleMapSVG } from './musclemap.js';
+import { Store } from './store.js';
+import { renderBodyTab, openProfile, bindBody } from './bodyui.js';
+import { ProgramRun } from './program.js';
+import { renderPrograms, bindPrograms } from './programui.js';
+import { bindProfiles, renderLogin, avatar } from './profileui.js';
 
 const $ = (sel) => document.querySelector(sel);
 const SETTINGS_KEY = 'repcounter.settings';
-const HISTORY_KEY = 'repcounter.history';
-const CUSTOM_KEY = 'repcounter.custom';
 const COUNTDOWN_S = 5;
 
 const voice = new Voice();
@@ -18,10 +21,9 @@ const testVideo = params.get('video'); // ?video=chemin.mp4 : remplace la camér
 const defaults = { exercise: 'pushup', mode: 'free', target: 20, duration: 60, facing: 'user', model: 'lite', voice: true, debug: false };
 const settings = { ...defaults, ...readJSON(SETTINGS_KEY, {}) };
 const saveSettings = () => localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-const loadHistory = () => readJSON(HISTORY_KEY, []);
-const saveHistory = (h) => localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(-2000)));
-const loadCustom = () => readJSON(CUSTOM_KEY, []);
-let exercises = allExercises(loadCustom());
+const store = new Store();
+const loadHistory = () => store.history;
+let exercises = allExercises(store.custom);
 if (!exercises[settings.exercise]) settings.exercise = 'pushup';
 
 function readJSON(key, fallback) {
@@ -64,7 +66,7 @@ function showError(msg) {
 let statsEx = 'all';
 
 function renderAll() {
-  exercises = allExercises(loadCustom());
+  exercises = allExercises(store.custom);
   const history = loadHistory();
   const now = new Date();
 
@@ -90,9 +92,12 @@ function renderAll() {
     week.append(day);
   });
 
+  renderPrograms();
   renderExercisePicker(history);
   renderStats(history, now);
   renderCustomList();
+  renderBodyTab(store);
+  renderSyncStatus();
 }
 
 function renderExercisePicker(history) {
@@ -367,6 +372,7 @@ function showTab(name) {
   document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
   hideTip();
   scrollTo(0, 0);
+  if (name === 'body') renderBodyTab(store);
 }
 
 // ---------- Fiches (saisie manuelle, création d'exercice) ----------
@@ -411,10 +417,7 @@ function saveManual(e) {
   const date = new Date(y, m - 1, d, 12);
   const today = new Date();
   if (dayKey(date) === dayKey(today)) date.setTime(today.getTime());
-  const history = loadHistory();
-  history.push({ date: date.toISOString(), exercise: id, kind: exercises[id].kind, reps: manual.value, partials: 0, seconds: isHoldEx(id) ? manual.value : 0, source: 'manual' });
-  history.sort((a, b) => new Date(a.date) - new Date(b.date));
-  saveHistory(history);
+  store.addSession({ date: date.toISOString(), exercise: id, kind: exercises[id].kind, reps: manual.value, partials: 0, seconds: isHoldEx(id) ? manual.value : 0, source: 'manual' });
   closeSheets();
   renderAll();
   showError(`${exName(id)} : ${isHoldEx(id) ? fmtTime(manual.value) : `${manual.value} rép.`} enregistré ✔︎`);
@@ -451,9 +454,7 @@ function saveCustom(e) {
   if (!primary.length) { showError('Choisis au moins un muscle principal.'); return; }
   const def = { name: $('#custom-name').value, preset: $('#custom-preset').value, primary, secondary: Object.keys(customMuscles).filter((m) => customMuscles[m] === 'secondary') };
   const ex = makeCustom(def);
-  const list = loadCustom();
-  list.push({ ...def, id: ex.id });
-  localStorage.setItem(CUSTOM_KEY, JSON.stringify(list));
+  store.addCustom({ ...def, id: ex.id });
   settings.exercise = ex.id;
   saveSettings();
   closeSheets();
@@ -465,7 +466,7 @@ function saveCustom(e) {
 function renderCustomList() {
   const list = $('#custom-list');
   list.innerHTML = '';
-  for (const def of loadCustom()) {
+  for (const def of store.custom) {
     const ex = exercises[def.id];
     if (!ex) continue;
     const li = el('li');
@@ -476,7 +477,7 @@ function renderCustomList() {
     del.append(icon('trash'));
     del.addEventListener('click', () => {
       if (!confirm(`Supprimer « ${ex.name} » ? Les séances déjà faites restent dans l'historique.`)) return;
-      localStorage.setItem(CUSTOM_KEY, JSON.stringify(loadCustom().filter((d) => d.id !== def.id)));
+      store.deleteCustom(def.id);
       if (settings.exercise === def.id) { settings.exercise = 'pushup'; saveSettings(); }
       renderAll();
       bindSettings.refresh();
@@ -487,9 +488,31 @@ function renderCustomList() {
   if (!list.children.length) list.append(el('li', 'empty', 'Aucun exercice personnalisé pour l\'instant.'));
 }
 
+// ---------- Profil et synchronisation ----------
+function renderSyncStatus() {
+  const p = store.profile;
+  $('#profile-name').textContent = p.name || store.user?.name || 'Mon profil';
+  const details = [p.sex === 'f' ? 'Femme' : p.sex === 'm' ? 'Homme' : null, p.heightCm ? `${p.heightCm} cm` : null, p.birthYear ? `${new Date().getFullYear() - p.birthYear} ans` : null].filter(Boolean);
+  $('#profile-details').textContent = details.length ? details.join(' · ') : 'Touche pour compléter (utile pour les mensurations)';
+  const st = $('#sync-status');
+  const when = store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : null;
+  st.className = `sync ${store.status}`;
+  st.textContent = {
+    local: 'Données sur ce téléphone uniquement',
+    syncing: 'Synchronisation…',
+    synced: `Synchronisé avec le serveur${when ? ` à ${when}` : ''} ✓`,
+    offline: 'Hors ligne : synchronisation au retour du réseau',
+  }[store.status];
+  const me = { name: $('#profile-name').textContent, avatar: p.avatar };
+  $('#avatar').replaceWith(Object.assign(avatar(me), { id: 'avatar' }));
+  $('#who-avatar').replaceWith(Object.assign(avatar(me, 'sm'), { id: 'who-avatar' }));
+  $('#who-btn').hidden = !(store.server && store.profileId);
+  $('#dash-link').hidden = !store.server;
+}
+
 // ---------- Sauvegarde ----------
 function exportData() {
-  const data = { app: 'repcounter', version: 1, exportedAt: new Date().toISOString(), history: loadHistory(), custom: loadCustom(), settings };
+  const data = { ...store.exportBackup(), settings };
   const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
   const a = el('a');
   a.href = url;
@@ -505,18 +528,13 @@ async function importData(file) {
     const data = JSON.parse(await file.text());
     if (data.app !== 'repcounter' || !Array.isArray(data.history)) throw new Error('fichier non reconnu');
     const valid = (h) => h && typeof h.exercise === 'string' && Number.isFinite(h.reps) && !Number.isNaN(new Date(h.date).getTime());
-    const incoming = data.history.filter(valid);
-    // Fusion : on ajoute les séances absentes (même date + même exercice = doublon).
-    const history = loadHistory();
-    const seen = new Set(history.map((h) => `${h.date}|${h.exercise}`));
-    const added = incoming.filter((h) => !seen.has(`${h.date}|${h.exercise}`));
-    history.push(...added);
-    history.sort((a, b) => new Date(a.date) - new Date(b.date));
-    saveHistory(history);
-    const custom = loadCustom();
-    const ids = new Set(custom.map((c) => c.id));
-    for (const c of Array.isArray(data.custom) ? data.custom : []) if (c?.id && c?.name && !ids.has(c.id)) custom.push(c);
-    localStorage.setItem(CUSTOM_KEY, JSON.stringify(custom));
+    const validM = (m) => m && !Number.isNaN(new Date(m.date).getTime());
+    const added = store.importBackup({
+      profile: data.profile,
+      history: data.history.filter(valid),
+      measurements: (Array.isArray(data.measurements) ? data.measurements : []).filter(validM),
+      custom: (Array.isArray(data.custom) ? data.custom : []).filter((c) => c?.id && c?.name),
+    });
     renderAll();
     showError(`Import terminé : ${added.length} séance${added.length > 1 ? 's' : ''} ajoutée${added.length > 1 ? 's' : ''} ✔︎`);
   } catch (err) {
@@ -594,44 +612,78 @@ function setPoseState(ok) {
   chip.textContent = ok ? (session?.hold ? 'Position tenue ✓' : 'En position ✓') : 'Mise en place';
 }
 
-async function startWorkout() {
-  voice.enabled = settings.voice;
-  voice.unlock(); // doit se faire pendant le clic (iOS)
+/** Objectif de l'étape en cours : programme, ou mode « Objectif » d'un exercice seul. */
+const targetOf = () => (session.run ? session.run.step?.target ?? null : settings.mode === 'reps' ? settings.target : null);
+const timed = () => !session.run && settings.mode === 'time';
+const fmtStep = (s) => (isHoldEx(s.exercise) ? fmtTime(s.target) : `× ${s.target}`);
+const spokenStep = (s) => `${exName(s.exercise)}, ${s.target} ${isHoldEx(s.exercise) ? 'secondes' : 'répétitions'}`;
+let lastProgram = null; // pour « Recommencer »
 
-  const ex = exercises[settings.exercise];
-  const hold = ex.kind === 'hold';
-  showScreen('workout');
-  $('#loading').hidden = false;
-  $('#loading-text').textContent = 'Démarrage de la caméra…';
+function setExercise(ex) {
+  session.ex = ex;
+  session.hold = ex.kind === 'hold';
+  session.counter = new RepCounter(ex);
+}
+
+/** Affiche l'exercice en cours (nom, compteur, objectif, étape du programme). */
+function showStep() {
+  const { ex, hold, run } = session;
   $('#hud-exercise').textContent = ex.name;
   $('#count').textContent = hold ? '0:00' : '0';
   $('#count').className = hold ? 'time' : '';
+  const target = targetOf();
+  $('#count-target').textContent = target ? `sur ${hold ? fmtTime(target) : target}` : hold ? 'tenu' : '';
+  $('#ring').toggleAttribute('hidden', !target && !timed()); // SVG : pas de propriété .hidden
+  setRing(timed() ? 1 : 0);
+  $('#hud-step').hidden = !run;
+  $('#skip').hidden = !run;
+  $('#next-up').hidden = !run;
+  if (run) {
+    $('#hud-step').textContent = `Étape ${run.index + 1}/${run.program.steps.length}`;
+    const n = run.nextStep;
+    $('#next-up').textContent = n ? `Ensuite : ${exName(n.exercise)} ${fmtStep(n)}` : 'Dernier exercice 💪';
+  }
   $('#hint').textContent = '';
+  session.lastHint = '';
+  session.poseOk = null;
+  setPoseState(false);
+}
+
+async function startWorkout(program = null) {
+  if (!program?.steps) program = null; // appelé depuis un clic : l'argument est l'événement
+  voice.enabled = settings.voice;
+  voice.unlock(); // doit se faire pendant le clic (iOS)
+
+  const run = program ? new ProgramRun(program) : null;
+  lastProgram = program;
+  showScreen('workout');
+  $('#loading').hidden = false;
+  $('#loading-text').textContent = 'Démarrage de la caméra…';
+  $('#rest').hidden = true;
+  $('#workout').classList.remove('resting');
   $('#debug-info').hidden = !settings.debug;
-  $('#count-target').textContent = settings.mode === 'reps' ? `sur ${hold ? fmtTime(settings.target) : settings.target}` : hold ? 'tenu' : '';
-  $('#hud-timer').textContent = settings.mode === 'time' ? fmtTime(settings.duration) : '0:00';
-  $('#ring').toggleAttribute('hidden', settings.mode === 'free'); // SVG : pas de propriété .hidden
-  setRing(settings.mode === 'time' ? 1 : 0);
   $('#workout').classList.toggle('mirrored', settings.facing === 'user' && !testVideo);
 
   session = {
-    ex,
-    hold,
-    counter: new RepCounter(ex),
+    run,
     stream: null,
     wakeLock: null,
     raf: 0,
     lastVideoTime: -1,
     countdownEnd: 0,
-    startedAt: 0,
-    state: 'loading', // loading → countdown → active → done
+    startedAt: 0,      // début de la séance (après le premier compte à rebours)
+    stepStartedAt: 0,  // début de l'exercice en cours
+    restEnd: 0,
+    state: 'loading',  // loading → countdown → active → (rest → countdown → active …) → done
     lastSpokenHintAt: 0,
     lastHint: '',
     poseOk: null,
     announced: new Set(),
     diag: settings.debug ? { frames: [], startedAt: Date.now() } : null,
   };
-  setPoseState(false);
+  setExercise(exercises[run ? run.step.exercise : settings.exercise]);
+  showStep();
+  $('#hud-timer').textContent = timed() ? fmtTime(settings.duration) : '0:00';
 
   try {
     session.stream = await startCamera();
@@ -654,7 +706,9 @@ async function startWorkout() {
   $('#loading').hidden = true;
   session.state = 'countdown';
   session.countdownEnd = performance.now() + COUNTDOWN_S * 1000;
-  voice.say(`${ex.setupHint}.`, { interrupt: true });
+  voice.say(run
+    ? `Programme ${program.name}. Premier exercice : ${spokenStep(run.step)}. ${session.ex.setupHint}.`
+    : `${session.ex.setupHint}.`, { interrupt: true });
   loop();
 }
 
@@ -708,13 +762,27 @@ function loop() {
     }
   }
 
+  if (session.startedAt) updateTimer((now - session.startedAt) / 1000);
+  if (!session || session.state === 'done') return;
+
+  if (session.state === 'rest') {
+    const left = Math.ceil((session.restEnd - now) / 1000);
+    $('#rest-time').textContent = fmtTime(Math.max(0, left));
+    if (left === 10 && !session.announced.has('rest10')) {
+      session.announced.add('rest10');
+      voice.say('10 secondes');
+    }
+    if (left <= 0) endRest(now);
+    return;
+  }
+
   if (session.state === 'countdown') {
     const left = Math.ceil((session.countdownEnd - now) / 1000);
     const cd = $('#countdown');
     if (left > 0) {
       cd.hidden = false;
       cd.innerHTML = `${left}<small></small>`;
-      cd.querySelector('small').textContent = session.ex.setupHint;
+      cd.querySelector('small').textContent = session.run ? `${session.ex.name} ${fmtStep(session.run.step)} · ${session.ex.setupHint}` : session.ex.setupHint;
       if (left <= 3 && !session.announced.has(`cd${left}`)) {
         session.announced.add(`cd${left}`);
         voice.say(String(left), { interrupt: true });
@@ -725,41 +793,39 @@ function loop() {
     voice.say('Go !', { interrupt: true });
     voice.beep(1046, 180);
     session.state = 'active';
-    session.startedAt = now;
+    if (!session.startedAt) session.startedAt = now;
+    session.stepStartedAt = now;
+    return;
   }
 
-  const elapsed = (now - session.startedAt) / 1000;
-  updateTimer(elapsed);
-  if (!session || session.state !== 'active') return;
-  if (fresh) handleResult(session.counter.update(landmarks, now, video.videoWidth / video.videoHeight), now);
+  if (session.state === 'active' && fresh) handleResult(session.counter.update(landmarks, now, video.videoWidth / video.videoHeight), now);
+}
+
+function goalReached() {
+  if (session.run) { voice.beep(880, 120); stepDone(performance.now()); return; }
+  voice.say('Objectif atteint, bravo !');
+  finishWorkout('Objectif atteint !');
 }
 
 function handleResult(r, now) {
   const lastFrame = session.diag?.frames.at(-1);
   if (lastFrame) lastFrame.r = { a: r.angle && +r.angle.toFixed(1), raw: r.raw && +r.raw.toFixed(1), ph: r.phase, v: r.valid, po: r.posture, sd: r.side, sc: r.score && +r.score.toFixed(2), ev: r.event, reps: r.reps };
   setPoseState(r.valid);
+  const target = targetOf();
 
   if (session.hold) {
     if (r.event === 'tick') {
       $('#count').textContent = fmtTime(r.reps);
-      if (settings.mode === 'reps') setRing(r.reps / settings.target);
-      if (r.reps % 10 === 0) voice.say(r.reps < 60 ? `${r.reps} secondes` : fmtTime(r.reps).replace(':', ' minute ').replace(' minute 00', ' minute'));
-      if (settings.mode === 'reps' && r.reps >= settings.target) {
-        voice.say('Objectif atteint, bravo !');
-        finishWorkout('Objectif atteint !');
-        return;
-      }
+      if (target) setRing(r.reps / target);
+      if (r.reps % 10 === 0 && !(target && r.reps >= target)) voice.say(r.reps < 60 ? `${r.reps} secondes` : fmtTime(r.reps).replace(':', ' minute ').replace(' minute 00', ' minute'));
+      if (target && r.reps >= target) { goalReached(); return; }
     }
   } else if (r.event === 'rep') {
     $('#count').textContent = r.reps;
-    if (settings.mode === 'reps') setRing(r.reps / settings.target);
+    if (target) setRing(r.reps / target);
     bump('bump');
     voice.say(String(r.reps));
-    if (settings.mode === 'reps' && r.reps >= settings.target) {
-      voice.say('Objectif atteint, bravo !');
-      finishWorkout('Objectif atteint !');
-      return;
-    }
+    if (target && r.reps >= target) { goalReached(); return; }
   } else if (r.event === 'partial') {
     bump('miss');
     voice.beep(330, 160);
@@ -780,8 +846,56 @@ function handleResult(r, now) {
   }
 }
 
+/** Enregistre l'exercice en cours du programme (même incomplet) et passe à l'étape suivante. */
+function recordStep(now) {
+  const { counter, run, ex } = session;
+  const seconds = session.state === 'active' && session.stepStartedAt ? (now - session.stepStartedAt) / 1000 : 0;
+  run.complete({ done: counter.reps, partials: counter.partials, seconds });
+  if (counter.reps > 0) {
+    store.addSession({ date: new Date().toISOString(), exercise: ex.id, kind: ex.kind, reps: counter.reps, partials: counter.partials, seconds: Math.round(seconds), source: 'camera', program: run.program.name });
+  }
+}
+
+function stepDone(now) {
+  recordStep(now);
+  const { run } = session;
+  if (run.finished) {
+    voice.say('Programme terminé, bravo !', { interrupt: true });
+    finishWorkout('Programme terminé !');
+    return;
+  }
+  setExercise(exercises[run.step.exercise]);
+  if (run.program.rest > 0) {
+    session.state = 'rest';
+    session.restEnd = now + run.program.rest * 1000;
+    session.announced.delete('rest10');
+    $('#rest-time').textContent = fmtTime(run.program.rest);
+    $('#rest-next').textContent = `Prochain : ${exName(run.step.exercise)} ${fmtStep(run.step)}`;
+    $('#rest').hidden = false;
+    $('#workout').classList.add('resting');
+    voice.say(`Repos. Prochain exercice : ${spokenStep(run.step)}.`, { interrupt: true });
+  } else {
+    beginStepCountdown(now);
+  }
+}
+
+function endRest(now) {
+  $('#rest').hidden = true;
+  $('#workout').classList.remove('resting');
+  beginStepCountdown(now);
+}
+
+/** Court compte à rebours (3 s) avant chaque exercice suivant du programme. */
+function beginStepCountdown(now) {
+  showStep();
+  for (const k of ['cd1', 'cd2', 'cd3']) session.announced.delete(k);
+  session.state = 'countdown';
+  session.countdownEnd = now + 3000;
+  if (!session.run.program.rest) voice.say(spokenStep(session.run.step), { interrupt: true });
+}
+
 function updateTimer(elapsed) {
-  if (settings.mode === 'time') {
+  if (timed()) {
     const left = settings.duration - elapsed;
     $('#hud-timer').textContent = fmtTime(Math.ceil(left));
     setRing(left / settings.duration);
@@ -813,21 +927,22 @@ function stopMedia() {
 
 function finishWorkout(title = 'Bravo !') {
   if (!session || session.state === 'done') return;
+  const now = performance.now();
+  if (session.run) return finishProgram(title, now);
   const wasActive = session.state === 'active';
-  const seconds = wasActive ? (performance.now() - session.startedAt) / 1000 : 0;
+  const seconds = wasActive ? (now - session.startedAt) / 1000 : 0;
   const { reps, partials } = session.counter;
   const { ex, hold } = session;
   session.state = 'done';
   stopMedia();
   if (session.diag?.frames.length) sendDiagnostic(session);
   $('#countdown').hidden = true;
+  $('#sum-steps').hidden = true;
 
-  const history = loadHistory();
-  const previous = history.filter((h) => h.exercise === ex.id);
+  const previous = store.history.filter((h) => h.exercise === ex.id);
   const prevBest = previous.length ? previous.reduce((a, b) => (b.reps > a.reps ? b : a)) : null;
   if (wasActive && reps > 0) {
-    history.push({ date: new Date().toISOString(), exercise: ex.id, kind: ex.kind, reps, partials, seconds: Math.round(seconds), source: 'camera' });
-    saveHistory(history);
+    store.addSession({ date: new Date().toISOString(), exercise: ex.id, kind: ex.kind, reps, partials, seconds: Math.round(seconds), source: 'camera' });
   }
 
   const v = (n) => (hold ? fmtTime(n) : String(n));
@@ -847,6 +962,50 @@ function finishWorkout(title = 'Bravo !') {
     ? (hold ? 'Position non détectée. Vérifie le placement du téléphone.' : 'Aucune répétition détectée. Vérifie le placement du téléphone.')
     : !last ? 'Première séance enregistrée 🎉'
     : `${diff >= 0 ? '+' : '−'}${v(Math.abs(diff))} par rapport à la dernière fois (${v(last.reps)}) · record ${v(Math.max(prevBest.reps, reps))}`;
+  session = null;
+  renderAll();
+  showScreen('summary');
+}
+
+/** Fin d'un programme (terminé ou arrêté) : bilan étape par étape. */
+function finishProgram(title, now) {
+  const { run } = session;
+  if (!run.finished && session.state === 'active' && session.counter.reps > 0) recordStep(now);
+  const seconds = session.startedAt ? (now - session.startedAt) / 1000 : 0;
+  session.state = 'done';
+  stopMedia();
+  if (session.diag?.frames.length) sendDiagnostic(session);
+  $('#countdown').hidden = true;
+  $('#rest').hidden = true;
+  $('#workout').classList.remove('resting');
+
+  const rep = run.report(exercises);
+  const all = rep.completed === rep.total;
+  $('#summary-exercise').textContent = run.program.name;
+  $('#summary-title').textContent = all ? title : 'Programme arrêté';
+  $('#sum-record').hidden = true;
+  $('#sum-reps').textContent = rep.reps;
+  $('#sum-reps').nextElementSibling.textContent = 'répétitions au total';
+  $('#sum-time').textContent = fmtTime(seconds);
+  const p = pace(rep.reps, seconds);
+  $('#sum-pace').textContent = p ? p.toFixed(0) : '—';
+  $('#sum-partials').textContent = run.results.reduce((s, r) => s + r.partials, 0);
+  $('#sum-compare').textContent = `${rep.completed}/${rep.total} exercice${rep.total > 1 ? 's' : ''} réussi${rep.total > 1 ? 's' : ''}`;
+
+  const list = $('#sum-steps');
+  list.innerHTML = '';
+  run.program.steps.forEach((step, i) => {
+    const r = run.results[i];
+    const li = el('li');
+    const what = el('span', 'what');
+    const hold = isHoldEx(step.exercise);
+    const v = (n) => (hold ? fmtTime(n) : String(n));
+    what.append(el('span', null, exName(step.exercise)), el('small', null, r ? (r.seconds ? `${fmtTime(r.seconds)}` : 'passé') : 'non fait'));
+    const score = el('strong', r && !r.skipped ? 'ok' : 'ko', r ? `${v(r.done)}/${v(step.target)}${r.skipped ? '' : ' ✓'}` : `${v(0)}/${v(step.target)}`);
+    li.append(icon(exercises[step.exercise]?.icon ?? 'custom'), what, score);
+    list.append(li);
+  });
+  list.hidden = false;
   session = null;
   renderAll();
   showScreen('summary');
@@ -878,8 +1037,29 @@ async function sendDiagnostic(sess) {
 }
 
 // ---------- Démarrage ----------
+bindBody(store, { showError, openSheet, closeSheets, onChange: () => renderAll() });
+bindPrograms({ store, exercises: () => exercises, openSheet, closeSheets, showError, onChange: () => renderAll(), onLaunch: (p) => startWorkout(p) });
 renderAll();
 bindSettings();
+bindProfiles({ store, showError, openSheet, closeSheets, onChange: () => renderAll(), onPicked: () => { showScreen('app'); showTab('train'); renderAll(); } });
+store.addEventListener('choose', () => { if (session) return; closeSheets(); renderLogin(); showScreen('login'); });
+store.addEventListener('locked', () => {
+  if (session) return;
+  closeSheets();
+  renderLogin();
+  showScreen('login');
+  showError('Code modifié ou accès expiré : saisis ton code à nouveau.');
+});
+store.addEventListener('profiles', () => { if ($('#login').classList.contains('active')) renderLogin(); });
+// Profil pas encore choisi sur ce téléphone : la page de choix s'affiche tout de suite (liste en cache).
+if (!localStorage.getItem('repcounter.activeProfile') && store.profiles.length) { renderLogin(); showScreen('login'); }
+$('#who-btn').addEventListener('click', () => store.signOut());
+store.addEventListener('status', renderSyncStatus);
+store.addEventListener('change', () => { if (!session) renderAll(); });
+store.init();
+addEventListener('online', () => store.sync());
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !session) store.sync(); });
+$('#profile-card').addEventListener('click', () => { openProfile(store); refreshProfilePhoto(); });
 
 document.querySelector('.tabbar').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-tab]');
@@ -893,14 +1073,18 @@ $('#stats-filter').addEventListener('click', (e) => {
 });
 addEventListener('scroll', hideTip, { passive: true });
 
-$('#start').addEventListener('click', startWorkout);
+$('#start').addEventListener('click', () => startWorkout());
 $('#stop').addEventListener('click', () => { voice.stop(); finishWorkout(); });
 $('#stop-x').addEventListener('click', () => { voice.stop(); finishWorkout(); });
 $('#back').addEventListener('click', () => showScreen('app'));
-$('#again').addEventListener('click', startWorkout);
+$('#again').addEventListener('click', () => startWorkout(lastProgram));
+$('#skip').addEventListener('click', () => {
+  if (session?.run && (session.state === 'active' || session.state === 'countdown')) { $('#countdown').hidden = true; stepDone(performance.now()); }
+});
+$('#rest-skip').addEventListener('click', () => { if (session?.state === 'rest') endRest(performance.now()); });
 $('#clear-history').addEventListener('click', () => {
   if (confirm('Effacer tout l\'historique ? Pense à l\'exporter avant si tu veux le garder.')) {
-    localStorage.removeItem(HISTORY_KEY);
+    store.clearHistory();
     renderAll();
   }
 });

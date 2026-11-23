@@ -99,6 +99,41 @@ calendrier de régularité sur 12 semaines. Filtrable par exercice.
 Saisie manuelle d'une série (onglet Séance) et **sauvegarde** export / import en JSON
 (onglet Réglages, l'import fusionne sans doublons).
 
+## Programmes de séance
+Onglet Séance → **Programmes** : une suite d'exercices avec un objectif chacun (répétitions, ou
+secondes pour le gainage / la chaise) et un repos entre les exercices. Ouvrir un programme permet de
+l'**ajuster avant de lancer** (objectifs, ordre, ajout / retrait d'exercices, repos) sans forcément
+enregistrer les changements. Pendant la séance : enchaînement automatique quand l'objectif est
+atteint, écran de repos (passable), bouton « Suivant » pour passer un exercice, annonces vocales du
+prochain exercice. Le bilan détaille chaque étape ; chaque exercice fait est enregistré dans
+l'historique. Les programmes sont synchronisés avec le profil (`js/program.js`, testé).
+
+## Profils, synchronisation et mensurations
+- **Profils** : à l'ouverture, la page « **Qui s'entraîne ?** » propose les profils (prénom + photo)
+  et permet d'en ajouter. Chaque profil a ses séances, mesures, programmes et exercices, stockés sur
+  le serveur (`DATA_DIR/profiles/<id>.json`) et synchronisés entre appareils. Changer de profil :
+  pastille en haut de l'onglet Séance, ou Réglages → profil. Un profil supprimé part dans `trash/`.
+- **Code PIN** par profil (4 chiffres), vérifié par le serveur (empreinte scrypt, jetons d'accès par
+  appareil, attente croissante après 5 erreurs). Fichiers de profils **chiffrés** (AES-256-GCM,
+  clé `DATA_SECRET`). Voir DEPLOY.md.
+- **Photo de profil** : recadrée en carré et réduite (256 px, ~20-40 Ko) sur le téléphone avant envoi.
+- **Accès** : réservé aux personnes connectées via Pangolin (SSO). Toute personne ayant accès voit
+  tous les profils (usage familial). Sans Pangolin, l'app reste en mode local sur le téléphone.
+- L'app marche hors ligne : tout est d'abord enregistré sur le téléphone, puis fusionné
+  (`js/merge.js` : union des séances, la modification la plus récente gagne, suppressions propagées).
+- **Onglet Corps** : poids, cou, épaules, poitrine, taille, hanches, bras, cuisse, mollet ;
+  IMC, masse grasse estimée (méthode U.S. Navy), courbes d'évolution et **mannequin 3D**
+  (three.js) dont les proportions suivent tes mesures, avec comparaison côte à côte.
+- Développement local : `DATA_DIR=data DEV_USER=moi npm start`
+  (`DEV_USER` simule une connexion Pangolin, à ne jamais utiliser en production).
+
+## Tableau de bord (ordinateur)
+`/dashboard.html` (lien dans Réglages) : choix du profil, période (7 j → tout), filtre par exercice ;
+répétitions, séances, jours actifs, temps actif, série, record ; volume par jour / semaine / mois,
+répartition par exercice, muscles travaillés, régularité sur 52 semaines, courbes des mensurations,
+comparaison de tous les profils sur 30 jours ; gestion (suppression de séances, mesures, programmes)
+et export CSV de l'historique.
+
 ## Diagnostic
 Avec « Infos de détection » activé, la fin de séance envoie les points détectés (pas d'image) au
 serveur s'il est lancé avec `DIAG_DIR=logs`. Pour rejouer un enregistrement dans le compteur :
@@ -111,6 +146,12 @@ js/counter.js                 logique de comptage (pure, testée)
 js/stats.js                   statistiques de l'historique (pures, testées)
 js/exercises.js               catalogue : muscles, consignes, réglages de détection
 js/musclemap.js               silhouette face / dos de la carte des muscles
+js/store.js, js/merge.js      données du profil, synchronisation et fusion (testée)
+js/body.js, js/bodyui.js      mensurations : calculs (testés) et onglet Corps
+js/body3d.js                  mannequin 3D (three.js, chargé à la demande)
+js/program.js, js/programui.js  programmes de séance : logique (testée) et éditeur
+js/profileui.js, js/pinpad.js page « Qui s'entraîne ? », photos de profil, pavé de code PIN
+dashboard.html, js/dashboard.js  tableau de bord pour ordinateur
 js/voice.js                   synthèse vocale + bips
 sw.js, manifest.webmanifest   PWA / hors-ligne
 server.mjs                    serveur statique (HTTP ou HTTPS)

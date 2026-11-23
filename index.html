@@ -34,6 +34,7 @@
     <symbol id="i-knees" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="6" r="4"/><path d="M24 11v16M24 27v17M24 27h10v11M24 15l-8 8M24 15l8 6"/></g></symbol>
     <symbol id="i-burpee" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="6" r="4"/><path d="M24 11v15M24 14 15 5M24 14l9-9M24 26l-6 10M24 26l6 10M6 44h36M38 30v8l-3-3M38 38l3-3"/></g></symbol>
     <symbol id="i-custom" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="16"/><path d="M24 16v16M16 24h16"/></g></symbol>
+    <symbol id="i-body" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M8 8.5h8l-1 6h-6zM9.5 14.5 9 21M14.5 14.5 15 21M8 8.5 5.5 13M16 8.5l2.5 4.5"/></g></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 7V4h4v3M6 7l1 13h10l1-13"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></symbol>
@@ -45,6 +46,16 @@
     <symbol id="i-trophy" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4M12 14v4M8 20h8"/></symbol>
   </svg>
 
+  <!-- Choix du profil -->
+  <main id="login" class="screen">
+    <div class="login-wrap">
+      <img src="icons/icon-192.png" alt="" class="login-logo">
+      <h1>Qui s'entraîne ?</h1>
+      <p class="muted" id="login-empty" hidden>Crée ton profil pour commencer.</p>
+      <div class="login-grid" id="login-grid"></div>
+    </div>
+  </main>
+
   <div id="app" class="screen active">
     <!-- Onglet Séance -->
     <section id="tab-train" class="tab active">
@@ -53,12 +64,18 @@
           <p class="eyebrow" id="today"></p>
           <h1>Entraînement</h1>
         </div>
-        <div class="streak" id="streak-chip" title="Jours d'affilée"><svg><use href="#i-flame"/></svg><span id="streak">0</span></div>
+        <div class="top-right">
+          <div class="streak" id="streak-chip" title="Jours d'affilée"><svg><use href="#i-flame"/></svg><span id="streak">0</span></div>
+          <button class="who-btn" id="who-btn" aria-label="Changer de profil" hidden><span class="avatar sm" id="who-avatar"></span></button>
+        </div>
       </header>
 
       <div class="week" id="week" aria-label="Cette semaine"></div>
 
-      <h2 class="section">Exercice</h2>
+      <h2 class="section">Programmes</h2>
+      <div class="prog-list" id="program-list"></div>
+
+      <h2 class="section">Exercice seul</h2>
       <div id="exercise-groups"></div>
       <p class="tip" id="exercise-tip"></p>
       <button id="open-manual" class="ghost"><svg><use href="#i-plus"/></svg>Saisir une série à la main</button>
@@ -132,6 +149,16 @@
     <!-- Onglet Réglages -->
     <section id="tab-settings" class="tab">
       <header class="top"><div><p class="eyebrow">Préférences</p><h1>Réglages</h1></div></header>
+      <button class="panel profile-card" id="profile-card">
+        <span class="avatar" id="avatar"></span>
+        <span class="what"><strong id="profile-name">Mon profil</strong><small id="profile-details"></small></span>
+        <span class="chev">›</span>
+      </button>
+      <p class="sync local" id="sync-status"></p>
+      <a class="panel dash-link" id="dash-link" href="dashboard.html" target="_blank" hidden>
+        <span class="what"><strong>Tableau de bord</strong><small>Statistiques détaillées et gestion, sur ordinateur</small></span>
+        <span class="chev">›</span>
+      </a>
       <div class="panel list">
         <div class="row">
           <label for="facing">Caméra</label>
@@ -167,9 +194,50 @@
       <p class="tip">Tout reste sur ton téléphone : la détection tourne en local, aucune image n'est envoyée.</p>
     </section>
 
+    <!-- Onglet Corps -->
+    <section id="tab-body" class="tab">
+      <header class="top">
+        <div><p class="eyebrow" id="body-who">Mensurations</p><h1>Corps</h1></div>
+        <button id="open-measure" class="pill-btn"><svg><use href="#i-plus"/></svg>Mesures</button>
+      </header>
+
+      <div class="panel notice" id="profile-missing" hidden>
+        <p>Indique ton sexe et ta taille dans ton profil : ils servent au mannequin et au calcul de la masse grasse.</p>
+        <button id="fill-profile" class="secondary">Compléter mon profil</button>
+      </div>
+
+      <div class="panel body3d-panel">
+        <div id="body3d" class="body3d"><span class="spinner"></span></div>
+        <div class="filters center-row" id="compare-filter">
+          <button data-cmp="none">Actuel</button>
+          <button data-cmp="first">vs 1re mesure</button>
+          <button data-cmp="30">vs −30 jours</button>
+        </div>
+        <p class="legend3d"><span id="legend-ghost"><i class="was"></i><span id="cmp-label"></span></span><span><i class="solid"></i>Maintenant</span></p>
+        <p class="hint3d">Fais glisser pour tourner · double-tape pour figer</p>
+        <div class="notice" id="body-empty" hidden>
+          <p>Le mannequin utilise des mesures moyennes tant que tu n'as rien saisi.</p>
+          <button id="body-empty-add" class="primary">Ajouter mes premières mesures</button>
+        </div>
+      </div>
+
+      <div class="kpis" id="body-kpis"></div>
+
+      <div class="panel">
+        <div class="panel-head"><h3>Évolution</h3></div>
+        <div id="body-charts" class="spark-grid"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h3>Mesures enregistrées</h3></div>
+        <ul id="measure-list" class="history"></ul>
+      </div>
+    </section>
+
     <nav class="tabbar">
       <button data-tab="train" class="on"><svg><use href="#i-home"/></svg>Séance</button>
       <button data-tab="stats"><svg><use href="#i-chart"/></svg>Stats</button>
+      <button data-tab="body"><svg><use href="#i-body"/></svg>Corps</button>
       <button data-tab="settings"><svg><use href="#i-gear"/></svg>Réglages</button>
     </nav>
   </div>
@@ -182,7 +250,7 @@
     </div>
     <div class="hud top">
       <button id="stop-x" class="icon-btn" aria-label="Terminer"><svg><use href="#i-close"/></svg></button>
-      <span id="hud-exercise"></span>
+      <span class="hud-title"><span id="hud-exercise"></span><small id="hud-step" hidden></small></span>
       <span id="hud-timer" class="pill">0:00</span>
     </div>
     <div class="count-wrap">
@@ -194,11 +262,21 @@
       <div id="count-target"></div>
     </div>
     <div id="countdown" hidden></div>
+    <div id="rest" class="rest" hidden>
+      <p class="eyebrow">Repos</p>
+      <div id="rest-time">0:30</div>
+      <p id="rest-next"></p>
+      <button id="rest-skip" class="secondary">Passer le repos</button>
+    </div>
     <div class="hud bottom">
       <span id="pose-state" class="pose-chip wait">Mise en place</span>
       <p id="hint"></p>
       <p id="debug-info" hidden></p>
-      <button id="stop" class="stop">Terminer</button>
+      <p id="next-up" hidden></p>
+      <div class="hud-actions">
+        <button id="stop" class="stop">Terminer</button>
+        <button id="skip" class="skip" hidden>Suivant ›</button>
+      </div>
     </div>
     <div id="loading" class="loading"><span class="spinner"></span><span id="loading-text">Démarrage de la caméra…</span></div>
   </main>
@@ -211,6 +289,7 @@
       <div class="badge" id="sum-record" hidden><svg><use href="#i-trophy"/></svg>Nouveau record</div>
       <div class="big"><strong id="sum-reps">0</strong><span>répétitions</span></div>
       <p class="muted center" id="sum-compare"></p>
+      <ul id="sum-steps" class="history sum-steps" hidden></ul>
       <div class="stats">
         <div><strong id="sum-time">0:00</strong><span>durée</span></div>
         <div><strong id="sum-pace">—</strong><span>reps / min</span></div>
@@ -246,6 +325,81 @@
         <div class="chips" id="custom-muscles"></div>
       </div>
       <button class="primary" type="submit">Créer</button>
+    </form>
+  </div>
+
+  <!-- Mensurations -->
+  <div class="sheet" id="sheet-measure" hidden>
+    <form class="sheet-body" id="measure-form">
+      <div class="sheet-head"><h2>Nouvelles mesures</h2><button type="button" class="icon-btn" data-close aria-label="Fermer"><svg><use href="#i-close"/></svg></button></div>
+      <label class="field">Date<input type="date" id="measure-date"></label>
+      <p class="tip" style="margin:0">Remplis seulement ce que tu as mesuré. Mètre ruban souple, à plat sur la peau, sans serrer.</p>
+      <div class="mgrid" id="measure-fields"></div>
+      <button class="primary" type="submit">Enregistrer</button>
+    </form>
+  </div>
+
+  <!-- Profil -->
+  <div class="sheet" id="sheet-profile" hidden>
+    <form class="sheet-body" id="profile-form">
+      <div class="sheet-head"><h2>Mon profil</h2><button type="button" class="icon-btn" data-close aria-label="Fermer"><svg><use href="#i-close"/></svg></button></div>
+      <div class="photo-row">
+        <span id="pf-preview"></span>
+        <div class="photo-actions">
+          <label class="secondary file-btn">Choisir une photo<input type="file" id="pf-photo" accept="image/*" hidden></label>
+          <button type="button" class="link" id="pf-photo-remove" hidden>Retirer la photo</button>
+        </div>
+      </div>
+      <label class="field">Prénom<input id="pf-name" maxlength="40" autocomplete="given-name"></label>
+      <div class="field">Sexe<small>Sert aux proportions du mannequin et à la formule de masse grasse</small>
+        <div class="segmented two-seg">
+          <label><input type="radio" name="pf-sex" value="m"><span>Homme</span></label>
+          <label><input type="radio" name="pf-sex" value="f"><span>Femme</span></label>
+        </div>
+      </div>
+      <div class="two">
+        <label class="field">Taille (cm)<input id="pf-height" type="number" inputmode="numeric" min="100" max="250"></label>
+        <label class="field">Année de naissance<input id="pf-birth" type="number" inputmode="numeric" min="1900"></label>
+      </div>
+      <button class="primary" type="submit">Enregistrer</button>
+      <button type="button" class="secondary" id="pf-pin" style="margin-top:0">Changer mon code</button>
+      <button type="button" class="secondary" id="pf-switch" style="margin-top:0">Changer de profil (verrouiller)</button>
+      <button type="button" class="link center danger-link" id="pf-delete">Supprimer ce profil</button>
+    </form>
+  </div>
+
+  <!-- Programme : création, modification, ajustement avant de lancer -->
+  <div class="sheet" id="sheet-program" hidden>
+    <form class="sheet-body" id="program-form">
+      <div class="sheet-head"><h2 id="prog-title">Programme</h2><button type="button" class="icon-btn" data-close aria-label="Fermer"><svg><use href="#i-close"/></svg></button></div>
+      <label class="field">Nom<input id="prog-name" maxlength="40" placeholder="Ex. : Haut du corps"></label>
+      <ol id="prog-steps" class="prog-steps-edit"></ol>
+      <button type="button" id="prog-add" class="ghost" style="margin-top:0"><svg><use href="#i-plus"/></svg>Ajouter un exercice</button>
+      <div class="stepper rest-stepper">
+        <button type="button" data-rest="-15" aria-label="Moins de repos">−</button>
+        <div><strong id="prog-rest-value">0:30</strong><small>repos entre les exercices</small></div>
+        <button type="button" data-rest="15" aria-label="Plus de repos">+</button>
+      </div>
+      <p class="tip center" id="prog-summary" style="margin:0"></p>
+      <button class="primary" type="submit"><svg><use href="#i-play"/></svg>Lancer la séance</button>
+      <button type="button" class="secondary" id="prog-save" style="margin-top:0">Enregistrer le programme</button>
+      <button type="button" class="link center" id="prog-delete" hidden>Supprimer ce programme</button>
+    </form>
+  </div>
+
+  <!-- Nouveau profil -->
+  <div class="sheet" id="sheet-newprofile" hidden>
+    <form class="sheet-body" id="np-form">
+      <div class="sheet-head"><h2>Nouveau profil</h2><button type="button" class="icon-btn" data-close aria-label="Fermer"><svg><use href="#i-close"/></svg></button></div>
+      <div class="photo-row">
+        <span id="np-preview"></span>
+        <div class="photo-actions">
+          <label class="secondary file-btn">Ajouter une photo<input type="file" id="np-photo" accept="image/*" hidden></label>
+          <small class="muted">Facultatif. Recadrée en carré, elle reste légère.</small>
+        </div>
+      </div>
+      <label class="field">Prénom<input id="np-name" required maxlength="40" autocomplete="off"></label>
+      <button class="primary" type="submit">Créer le profil</button>
     </form>
   </div>
 

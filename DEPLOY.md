@@ -55,15 +55,45 @@ version au prochain lancement sur l'iPhone.
 (`pangolin.public-resources.repcounter.*`). Ils ne sont lus que si un connecteur de site
 Pangolin a accès au socket Docker du VPS. Sinon, ils sont ignorés : utilise l'option A.
 
-## 4. Authentification
-Par défaut, Pangolin protège la ressource par son SSO : c'est recommandé (app perso).
-Sur iPhone, l'app installée sur l'écran d'accueil a son propre stockage : tu devras te
-connecter **une fois dans Safari, puis une fois dans l'app installée**. Si c'est gênant,
-remplace le SSO par un code PIN ou désactive l'authentification dans la ressource Pangolin.
+## 4. Authentification et profils
+Garde l'authentification **Pangolin SSO** sur la ressource : elle réserve l'accès à ta famille.
+Une fois connecté, chacun choisit son profil sur la page « **Qui s'entraîne ? »** (prénom + photo).
+Les données de chaque profil sont stockées dans le volume (`/data/users/profiles`, un fichier par
+profil) et synchronisées entre appareils. Le tableau de bord est sur `https://<domaine>/dashboard.html`.
+
+- **Ajouter quelqu'un** (ta copine) : invite-la comme utilisatrice dans ton organisation Pangolin et
+  donne-lui accès à la ressource ; elle crée son profil depuis la page de choix.
+- Toute personne ayant accès voit tous les profils (pas de mot de passe par profil).
+- Avec un code PIN Pangolin ou sans authentification, l'app ne reçoit pas d'identité et reste en
+  mode « données sur ce téléphone uniquement ».
+- **Ne publie jamais le port 8080** du conteneur : seul Pangolin doit pouvoir le joindre,
+  sinon l'en-tête d'identité pourrait être imité.
+- Sauvegarde des profils : `docker cp repcounter:/data/users ./sauvegarde-profils`
+  (les profils supprimés sont dans `/data/users/trash`).
+
+Sur iPhone, l'app installée sur l'écran d'accueil a son propre stockage : connecte-toi
+**une fois dans Safari, puis une fois dans l'app installée**.
+
+### Codes PIN et chiffrement
+- **Code PIN par profil** (4 chiffres) : vérifié par le serveur. Sans le bon code, impossible de
+  lire ou modifier les données d'un profil, même en appelant l'API directement. Après 5 erreurs,
+  attente croissante (jusqu'à 15 min). Le code n'est stocké que sous forme d'empreinte (scrypt).
+  « Changer de profil » reverrouille et efface la copie locale du profil sur le téléphone.
+- **Chiffrement des données** : chaque fichier de profil est chiffré (AES-256-GCM) avec la clé
+  `DATA_SECRET`. Quelqu'un qui récupère le disque ou une sauvegarde du volume ne peut rien lire.
+  1. Génère une clé, par exemple : `openssl rand -base64 32`
+  2. Dans Dockhand, ajoute-la en **Secret** nommé `DATA_SECRET`, et dans le compose :
+     `environment: - DATA_SECRET=${DATA_SECRET}`
+  3. **Garde-la dans ton gestionnaire de mots de passe** : sans elle, les données sont perdues.
+  Sans `DATA_SECRET`, une clé est créée automatiquement dans le volume (`/data/users/.key`) :
+  ça marche, mais la clé voyage alors avec les sauvegardes du volume.
+- Limite : l'administrateur du serveur détient la clé ; le chiffrement protège contre le vol des
+  fichiers, le code PIN protège l'accès entre les personnes de la famille.
 
 ## 5. Sur l'iPhone
-1. Avant tout, dans l'ancienne app (celle du Wi-Fi) : **Réglages → Exporter**. L'historique est
-   stocké par adresse, il ne suit pas automatiquement.
+1. Si tu viens de l'ancienne app (celle du Wi-Fi) : **Réglages → Exporter** d'abord, l'historique
+   est stocké par adresse. (Les données déjà présentes sur le téléphone à l'adresse du VPS sont
+   reprises automatiquement dans ton profil à la première synchronisation.)
 2. Ouvre `https://reps.mondomaine.fr` dans Safari → **Partager → Sur l'écran d'accueil**.
 3. Dans la nouvelle app : **Réglages → Importer** le fichier exporté.
 4. Tu peux supprimer l'ancienne icône et le profil « RepCounter Local CA »

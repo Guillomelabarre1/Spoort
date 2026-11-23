@@ -3,3 +3,4 @@ vendor
 certs
 logs
 .env
+data

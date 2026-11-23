@@ -2,7 +2,7 @@
   "name": "repcounter",
   "version": "0.1.0",
   "private": true,
-  "description": "Compteur de répétitions par la caméra (pompes, squats, tractions) — webapp auto-hébergeable.",
+  "description": "Compteur de répétitions par la caméra, stats et mensurations — webapp auto-hébergeable.",
   "type": "module",
   "scripts": {
     "setup": "npm install && node scripts/fetch-vendor.mjs",
@@ -10,7 +10,8 @@
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
-    "@mediapipe/tasks-vision": "1.2.3"
+    "@mediapipe/tasks-vision": "1.2.3",
+    "three": "0.187.0"
   },
   "engines": {
     "node": ">=20"

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c0e12">
+  <title>RepCounter · Tableau de bord</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=2">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body class="dash">
+  <header class="dash-top">
+    <div class="dash-brand">
+      <img src="icons/favicon-64.png?v=2" alt="">
+      <div><strong>RepCounter</strong><small>Tableau de bord</small></div>
+    </div>
+    <nav class="dash-profiles" id="dash-profiles" aria-label="Profils"></nav>
+    <div class="dash-actions">
+      <a class="secondary dash-btn" href="./">Ouvrir l'app</a>
+    </div>
+  </header>
+
+  <main class="dash-main" id="dash-main" hidden>
+    <div class="dash-filters">
+      <div class="segmented" id="dash-period">
+        <label><input type="radio" name="period" value="7"><span>7 jours</span></label>
+        <label><input type="radio" name="period" value="30" checked><span>30 jours</span></label>
+        <label><input type="radio" name="period" value="90"><span>3 mois</span></label>
+        <label><input type="radio" name="period" value="365"><span>1 an</span></label>
+        <label><input type="radio" name="period" value="all"><span>Tout</span></label>
+      </div>
+      <select id="dash-exercise" aria-label="Exercice"></select>
+      <button class="secondary dash-btn" id="dash-csv">Exporter en CSV</button>
+    </div>
+
+    <section class="dash-kpis" id="dash-kpis"></section>
+
+    <section class="dash-grid">
+      <div class="panel span-8">
+        <div class="panel-head"><h3 id="vol-title">Volume</h3><span class="muted" id="vol-sub"></span></div>
+        <div id="vol-chart" class="dash-chart"></div>
+      </div>
+      <div class="panel span-4">
+        <div class="panel-head"><h3>Par exercice</h3><span class="muted">sur la période</span></div>
+        <ul id="by-exercise" class="hbars"></ul>
+      </div>
+
+      <div class="panel span-4">
+        <div class="panel-head"><h3>Muscles travaillés</h3><span class="muted">sur la période</span></div>
+        <div id="dash-muscles"></div>
+        <div class="heat-legend"><span>rien</span><i class="h0"></i><i class="h1"></i><i class="h2"></i><i class="h3"></i><i class="h4"></i><span>beaucoup</span></div>
+      </div>
+      <div class="panel span-8">
+        <div class="panel-head"><h3>Régularité</h3><span class="muted">52 dernières semaines · séances par jour</span></div>
+        <div id="dash-heat" class="dash-heat"></div>
+        <div class="heat-legend"><span>moins</span><i class="h0"></i><i class="h1"></i><i class="h2"></i><i class="h3"></i><i class="h4"></i><span>plus</span></div>
+      </div>
+
+      <div class="panel span-12">
+        <div class="panel-head"><h3>Corps</h3><span class="muted" id="body-sub"></span></div>
+        <div id="dash-body" class="dash-body"></div>
+      </div>
+
+      <div class="panel span-12">
+        <div class="panel-head"><h3>Tous les profils</h3><span class="muted">30 derniers jours</span></div>
+        <table class="dash-table" id="dash-compare"></table>
+      </div>
+
+      <div class="panel span-8">
+        <div class="panel-head"><h3>Historique</h3><span class="muted" id="hist-sub"></span></div>
+        <table class="dash-table" id="dash-history"></table>
+        <button class="link" id="hist-more" hidden>Afficher plus</button>
+      </div>
+      <div class="panel span-4">
+        <div class="panel-head"><h3>Programmes</h3></div>
+        <ul class="history" id="dash-programs"></ul>
+        <div class="panel-head" style="margin-top:18px"><h3>Mesures</h3></div>
+        <ul class="history" id="dash-measures"></ul>
+      </div>
+    </section>
+  </main>
+
+  <div class="dash-empty" id="dash-empty" hidden></div>
+  <div id="tooltip" class="tooltip" hidden></div>
+  <div id="error" class="toast" hidden></div>
+  <script type="module" src="js/dashboard.js"></script>
+</body>
+</html>

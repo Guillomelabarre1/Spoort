@@ -98,3 +98,58 @@ export function muscleVolume(history, exercises, days = 7, now = new Date()) {
   }
   return vol;
 }
+
+/** Début de période (jour, semaine commençant le lundi, ou mois) contenant `d`. */
+export function periodStart(d, unit) {
+  const x = startOfDay(d);
+  if (unit === 'week') x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  if (unit === 'month') x.setDate(1);
+  return x;
+}
+
+function nextPeriod(d, unit) {
+  const x = new Date(d);
+  if (unit === 'day') x.setDate(x.getDate() + 1);
+  else if (unit === 'week') x.setDate(x.getDate() + 7);
+  else x.setMonth(x.getMonth() + 1);
+  return x;
+}
+
+/**
+ * Regroupe les séances par jour / semaine / mois entre `from` et `to` (inclus) :
+ * [{ start, reps, holdSeconds, sessions, activeSeconds }]. Périodes vides incluses.
+ */
+export function buckets(history, from, to, unit = 'day') {
+  const out = [];
+  const index = new Map();
+  for (let d = periodStart(from, unit); d <= to; d = nextPeriod(d, unit)) {
+    index.set(d.getTime(), out.length);
+    out.push({ start: new Date(d), reps: 0, holdSeconds: 0, sessions: 0, activeSeconds: 0 });
+  }
+  for (const h of history) {
+    const t = new Date(h.date);
+    if (t < from || t > to) continue;
+    const b = out[index.get(periodStart(t, unit).getTime())];
+    if (!b) continue;
+    if (isHold(h)) b.holdSeconds += h.reps; else b.reps += h.reps;
+    b.sessions += 1;
+    b.activeSeconds += h.seconds || 0;
+  }
+  return out;
+}
+
+/** Totaux par exercice : [{ exercise, reps, sessions, best, hold }], triés par volume. */
+export function byExercise(history) {
+  const map = new Map();
+  for (const h of history) {
+    const e = map.get(h.exercise) ?? { exercise: h.exercise, reps: 0, sessions: 0, best: 0, hold: isHold(h) };
+    e.reps += h.reps;
+    e.sessions += 1;
+    e.best = Math.max(e.best, h.reps);
+    map.set(h.exercise, e);
+  }
+  return [...map.values()].sort((a, b) => b.reps - a.reps);
+}
+
+/** Nombre de jours différents avec au moins une séance. */
+export const activeDays = (history) => new Set(history.map((h) => dayKey(h.date))).size;

@@ -24,6 +24,13 @@ await cp(join(pkg, 'vision_bundle.mjs'), join(vendor, 'vision_bundle.mjs'));
 await cp(join(pkg, 'wasm'), join(vendor, 'wasm'), { recursive: true });
 console.log('✓ MediaPipe Tasks Vision copié dans vendor/');
 
+// three.js (mannequin 3D des mensurations) : les deux fichiers du build ES module.
+await mkdir(join(vendor, 'three'), { recursive: true });
+for (const f of ['three.module.js', 'three.core.js']) {
+  await cp(join(root, 'node_modules', 'three', 'build', f), join(vendor, 'three', f));
+}
+console.log('✓ three.js copié dans vendor/three/');
+
 for (const [name, url] of Object.entries(MODELS)) {
   const dest = join(vendor, name);
   if (await exists(dest)) { console.log(`✓ ${name} déjà présent`); continue; }

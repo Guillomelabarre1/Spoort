@@ -59,3 +59,19 @@ test('les maintiens comptent pour la série mais pas dans les totaux de répéti
   assert.deepEqual(totals(h, 'all', 7, now), { reps: 10, sessions: 1 });
   assert.equal(bestSession(h, 'plank').reps, 60);
 });
+
+test('tableau de bord : regroupement par jour / semaine / mois et par exercice', async () => {
+  const { buckets, byExercise, activeDays, periodStart, startOfDay } = await import('../js/stats.js');
+  const h = [at(0, 10), at(0, 5, 'squat'), at(1, 20), at(8, 30), { ...at(2, 60, 'plank'), kind: 'hold' }];
+  const days = buckets(h, startOfDay(now, -2), now, 'day');
+  assert.deepEqual(days.map((b) => b.reps), [0, 20, 15]);
+  assert.equal(days[0].holdSeconds, 60);
+  assert.equal(days[2].sessions, 2);
+  const weeks = buckets(h, startOfDay(now, -13), now, 'week');
+  assert.equal(weeks.reduce((s, b) => s + b.reps, 0), 65);
+  assert.equal(periodStart(new Date(2026, 10, 26), 'week').getDate(), 23); // jeudi → lundi 23
+  assert.equal(periodStart(new Date(2026, 10, 26), 'month').getDate(), 1);
+  const ex = byExercise(h);
+  assert.deepEqual(ex.map((e) => [e.exercise, e.reps, e.best]), [['pushup', 60, 30], ['plank', 60, 60], ['squat', 5, 5]]);
+  assert.equal(activeDays(h), 4);
+});
