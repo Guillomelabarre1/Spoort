@@ -17,9 +17,28 @@ const voice = new Voice();
 const params = new URLSearchParams(location.search);
 const testVideo = params.get('video'); // ?video=chemin.mp4 : remplace la caméra (pour tester)
 
+// ---------- Pas de zoom sur iPhone ----------
+// Sécurité en plus du CSS : un 2e tap rapide au même endroit, hors bouton ou champ, ne zoome pas.
+// Les boutons gardent leurs taps rapides (− / + enchaînés).
+{
+  let last = { t: 0, x: 0, y: 0 };
+  document.addEventListener('touchend', (e) => {
+    const p = e.changedTouches[0];
+    if (!p) return;
+    const now = e.timeStamp;
+    const quick = now - last.t < 350 && Math.hypot(p.clientX - last.x, p.clientY - last.y) < 40;
+    last = { t: now, x: p.clientX, y: p.clientY };
+    if (quick && !e.target.closest('button, a, input, select, textarea, label, [role=button]')) e.preventDefault();
+  }, { passive: false });
+  // Pincement : iOS ignore user-scalable=no, on bloque aussi ce geste.
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+}
+
 // ---------- Données locales ----------
-const defaults = { exercise: 'pushup', mode: 'free', target: 20, duration: 60, facing: 'user', model: 'lite', voice: true, debug: false };
+const defaults = { exercise: 'pushup', mode: 'free', target: 20, duration: 60, facing: 'user', model: 'lite', audio: 'voice', every: 1, debug: false };
 const settings = { ...defaults, ...readJSON(SETTINGS_KEY, {}) };
+// Ancien réglage « Annonces vocales » (oui/non) → retour audio.
+if ('voice' in settings) { if (settings.voice === false && !readJSON(SETTINGS_KEY, {}).audio) settings.audio = 'off'; delete settings.voice; }
 const saveSettings = () => localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 const store = new Store();
 const loadHistory = () => store.history;
@@ -132,7 +151,8 @@ function bindSettings() {
   for (const r of radios('mode')) r.checked = r.value === settings.mode;
   $('#facing').value = settings.facing;
   $('#model').value = settings.model;
-  $('#voice').checked = settings.voice;
+  $('#audio').value = settings.audio;
+  $('#every').value = String(settings.every);
   $('#debug').checked = settings.debug;
 
   const refresh = () => {
@@ -144,6 +164,7 @@ function bindSettings() {
     $('#duration-value').textContent = fmtTime(settings.duration);
     $('#target-row').hidden = settings.mode !== 'reps';
     $('#duration-row').hidden = settings.mode !== 'time';
+    $('#every-row').hidden = settings.audio === 'off';
   };
   refresh();
   bindSettings.refresh = refresh;
@@ -153,7 +174,9 @@ function bindSettings() {
     if (t.name === 'exercise') settings.exercise = t.value;
     else if (t.name === 'mode') settings.mode = t.value;
     else if (t.id === 'facing' || t.id === 'model') settings[t.id] = t.value;
-    else if (t.id === 'voice' || t.id === 'debug') settings[t.id] = t.checked;
+    else if (t.id === 'audio') settings.audio = t.value;
+    else if (t.id === 'every') settings.every = Number(t.value) || 1;
+    else if (t.id === 'debug') settings[t.id] = t.checked;
     else return;
     saveSettings();
     refresh();
@@ -656,7 +679,7 @@ function showStep() {
 
 async function startWorkout(program = null) {
   if (!program?.steps) program = null; // appelé depuis un clic : l'argument est l'événement
-  voice.enabled = settings.voice;
+  voice.mode = settings.audio;
   voice.unlock(); // doit se faire pendant le clic (iOS)
 
   const run = program ? new ProgramRun(program) : null;
@@ -775,7 +798,7 @@ function loop() {
     $('#rest-time').textContent = fmtTime(Math.max(0, left));
     if (left === 10 && !session.announced.has('rest10')) {
       session.announced.add('rest10');
-      voice.say('10 secondes');
+      voice.announce('10 secondes', 'tick');
     }
     if (left <= 0) endRest(now);
     return;
@@ -790,13 +813,13 @@ function loop() {
       cd.querySelector('small').textContent = session.run ? `${session.ex.name} ${fmtStep(session.run.step)} · ${session.ex.setupHint}` : session.ex.setupHint;
       if (left <= 3 && !session.announced.has(`cd${left}`)) {
         session.announced.add(`cd${left}`);
-        voice.say(String(left), { interrupt: true });
+        voice.announce(String(left), 'tick', { interrupt: true });
       }
       return;
     }
     cd.hidden = true;
     voice.say('Go !', { interrupt: true });
-    voice.beep(1046, 180);
+    voice.cue('start');
     session.state = 'active';
     if (!session.startedAt) session.startedAt = now;
     session.stepStartedAt = now;
@@ -807,8 +830,8 @@ function loop() {
 }
 
 function goalReached() {
-  if (session.run) { voice.beep(880, 120); stepDone(performance.now()); return; }
-  voice.say('Objectif atteint, bravo !');
+  if (session.run) { voice.cue('milestone'); stepDone(performance.now()); return; }
+  voice.announce('Objectif atteint, bravo !', 'done');
   finishWorkout('Objectif atteint !');
 }
 
@@ -822,18 +845,19 @@ function handleResult(r, now) {
     if (r.event === 'tick') {
       $('#count').textContent = fmtTime(r.reps);
       if (target) setRing(r.reps / target);
-      if (r.reps % 10 === 0 && !(target && r.reps >= target)) voice.say(r.reps < 60 ? `${r.reps} secondes` : fmtTime(r.reps).replace(':', ' minute ').replace(' minute 00', ' minute'));
+      if (r.reps % 10 === 0 && !(target && r.reps >= target)) voice.announce(r.reps < 60 ? `${r.reps} secondes` : fmtTime(r.reps).replace(':', ' minute ').replace(' minute 00', ' minute'), 'milestone');
       if (target && r.reps >= target) { goalReached(); return; }
     }
   } else if (r.event === 'rep') {
     $('#count').textContent = r.reps;
     if (target) setRing(r.reps / target);
     bump('bump');
-    voice.say(String(r.reps));
+    // Annonce toutes les `every` répétitions (réglage), sauf la dernière, saluée par l'objectif.
+    if (r.reps % settings.every === 0 && !(target && r.reps >= target)) voice.announce(String(r.reps), 'rep');
     if (target && r.reps >= target) { goalReached(); return; }
   } else if (r.event === 'partial') {
     bump('miss');
-    voice.beep(330, 160);
+    voice.cue('partial');
   }
 
   setHint(r.hint);
@@ -865,7 +889,7 @@ function stepDone(now) {
   recordStep(now);
   const { run } = session;
   if (run.finished) {
-    voice.say('Programme terminé, bravo !', { interrupt: true });
+    voice.announce('Programme terminé, bravo !', 'done', { interrupt: true });
     finishWorkout('Programme terminé !');
     return;
   }
@@ -878,7 +902,7 @@ function stepDone(now) {
     $('#rest-next').textContent = `Prochain : ${exName(run.step.exercise)} ${fmtStep(run.step)}`;
     $('#rest').hidden = false;
     $('#workout').classList.add('resting');
-    voice.say(`Repos. Prochain exercice : ${spokenStep(run.step)}.`, { interrupt: true });
+    voice.announce(`Repos. Prochain exercice : ${spokenStep(run.step)}.`, 'rest', { interrupt: true });
   } else {
     beginStepCountdown(now);
   }
@@ -907,12 +931,12 @@ function updateTimer(elapsed) {
     for (const [at, msg] of [[30, '30 secondes'], [10, '10 secondes']]) {
       if (settings.duration > at + 5 && left <= at && !session.announced.has(`t${at}`)) {
         session.announced.add(`t${at}`);
-        voice.say(msg, { interrupt: true });
+        voice.announce(msg, 'tick', { interrupt: true });
       }
     }
     if (left <= 0) {
       const c = session.counter.reps;
-      voice.say(session.hold ? `Temps écoulé. ${c} secondes tenues.` : `Temps écoulé. ${c} répétitions.`, { interrupt: true });
+      voice.announce(session.hold ? `Temps écoulé. ${c} secondes tenues.` : `Temps écoulé. ${c} répétitions.`, 'done', { interrupt: true });
       finishWorkout('Temps écoulé !');
     }
   } else {

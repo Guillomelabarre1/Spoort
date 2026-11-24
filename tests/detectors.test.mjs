@@ -146,6 +146,43 @@ test('gainage de profil : compte les secondes tenues, pas debout', () => {
   assert.equal(standing.reps, 0);
 });
 
+test('gainage de face (téléphone au sol) : sur les avant-bras et bras tendus', () => {
+  // Valeurs proches d'un enregistrement réel sur iPhone : le buste fuit vers l'arrière.
+  const forearms = body({
+    [LM.nose]: [0.5, 0.3],
+    [LM.leftShoulder]: [0.35, 0.42], [LM.rightShoulder]: [0.65, 0.42],
+    [LM.leftElbow]: [0.33, 0.64], [LM.rightElbow]: [0.67, 0.64],
+    [LM.leftWrist]: [0.42, 0.72], [LM.rightWrist]: [0.58, 0.72],
+    [LM.leftHip]: [0.45, 0.52], [LM.rightHip]: [0.55, 0.52],
+    [LM.leftKnee]: [0.47, 0.55, 0.2], [LM.rightKnee]: [0.53, 0.55, 0.2],
+    [LM.leftAnkle]: [0.48, 0.57, 0.1], [LM.rightAnkle]: [0.52, 0.57, 0.1],
+  });
+  const straight = body({
+    [LM.nose]: [0.5, 0.2],
+    [LM.leftShoulder]: [0.32, 0.27], [LM.rightShoulder]: [0.68, 0.27],
+    [LM.leftElbow]: [0.3, 0.42], [LM.rightElbow]: [0.7, 0.42],
+    [LM.leftWrist]: [0.3, 0.56], [LM.rightWrist]: [0.7, 0.56],
+    [LM.leftHip]: [0.45, 0.42], [LM.rightHip]: [0.55, 0.42],
+  });
+  for (const [name, pose] of [['avant-bras', forearms], ['bras tendus', straight]]) {
+    const c = new RepCounter('plank');
+    feed(c, Array(80).fill(pose)); // 4 s
+    assert.ok(c.reps >= 3, `${name} : reps = ${c.reps}`);
+  }
+  // Debout ou assis face au téléphone : rien ne compte.
+  const sitting = body({
+    [LM.leftShoulder]: [0.38, 0.3], [LM.rightShoulder]: [0.62, 0.3],
+    [LM.leftElbow]: [0.36, 0.48], [LM.rightElbow]: [0.64, 0.48],
+    [LM.leftWrist]: [0.42, 0.6], [LM.rightWrist]: [0.58, 0.6],
+    [LM.leftHip]: [0.44, 0.6], [LM.rightHip]: [0.56, 0.6],
+  });
+  for (const pose of [body(), sitting]) {
+    const c = new RepCounter('plank');
+    feed(c, Array(80).fill(pose));
+    assert.equal(c.reps, 0);
+  }
+});
+
 test('chaise : cuisses à l\'horizontale, dos droit', () => {
   const sit = body({
     [LM.leftShoulder]: [0.42, 0.2], [LM.rightShoulder]: [0.58, 0.2, 0.3],

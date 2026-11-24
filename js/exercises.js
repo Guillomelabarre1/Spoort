@@ -148,8 +148,8 @@ const LIST = [
   {
     id: 'plank', name: 'Gainage', category: 'core', icon: 'plank', kind: 'hold',
     muscles: { primary: ['abs'], secondary: ['shoulders', 'obliques', 'lowerback', 'glutes'] },
-    tip: 'Téléphone de profil, au sol, à 2 m (de face au sol, ça marche aussi).',
-    setupHint: 'Mets-toi en planche, de profil',
+    tip: 'Téléphone au sol, de face à environ 1 m de tes coudes, ou de profil à 2 m. Sur les avant-bras ou bras tendus.',
+    setupHint: 'Mets-toi en planche, bien visible',
     detector: { type: 'hold', check: 'plank' },
   },
   {

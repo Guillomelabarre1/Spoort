@@ -20,6 +20,9 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+/* Pas de zoom au double tap. iOS ignore user-scalable=no mais respecte touch-action, qui ne
+   s'hérite pas : il faut le mettre sur chaque élément (le mannequin 3D garde son propre réglage). */
+*, *::before, *::after { touch-action: manipulation; }
 body {
   font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -327,6 +330,12 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 .mini-val strong { font-size: 18px; font-variant-numeric: tabular-nums; }
 .mini-val small { font-size: 10px; color: var(--muted); }
 .step-tools { display: flex; gap: 4px; }
+.target-input { display: flex; align-items: center; gap: 8px; }
+/* 16 px minimum : en dessous, Safari zoome sur le champ quand on le touche. */
+.target-input input { width: 76px; height: 40px; font: inherit; font-size: 18px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; -moz-appearance: textfield; }
+.target-input input::-webkit-inner-spin-button, .target-input input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.target-input input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.target-input small { font-size: 12px; color: var(--muted); }
 .step-tools button { width: 32px; height: 32px; font-size: 14px; color: var(--muted); }
 .step-tools button:disabled { opacity: .3; }
 .rest-stepper { margin-top: 0; }

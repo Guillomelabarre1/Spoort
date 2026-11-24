@@ -381,12 +381,27 @@ export class RepCounter {
       const angle = angleAt(lm[knee.side.hip], lm[knee.side.knee], lm[knee.side.ankle], aspect);
       return stable && angle >= 65 && angle <= 120 && h.y > s.y + 0.05;
     }
-    // plank : de profil, buste proche de l'horizontale ; de face, la planche bras tendus des pompes.
+    // plank : de profil, buste proche de l'horizontale. De face (téléphone au sol devant la tête),
+    // le buste fuit vers l'arrière : les hanches, plus loin, apparaissent entre les épaules et les
+    // appuis (coudes ou mains). Debout, elles sont bien plus bas que les coudes.
     const side = torsoTilt(lm, pick.side, aspect) < 35;
-    const sh = (lm[LM.leftShoulder].y + lm[LM.rightShoulder].y) / 2;
-    const wr = (lm[LM.leftWrist].y + lm[LM.rightWrist].y) / 2;
-    const hp = (lm[LM.leftHip].y + lm[LM.rightHip].y) / 2;
-    const front = wr - sh > 0.05 && hp - sh < 0.6 * (wr - sh);
-    return stable && (side || front);
+    return stable && (side || this.frontPlank(lm));
+  }
+
+  /** Planche vue de face, sur les avant-bras ou bras tendus. */
+  frontPlank(lm) {
+    const both = (a, b) => (visibility(lm[a]) >= this.minVisibility && visibility(lm[b]) >= this.minVisibility
+      ? (lm[a].y + lm[b].y) / 2 : null);
+    const sh = both(LM.leftShoulder, LM.rightShoulder);
+    const hp = both(LM.leftHip, LM.rightHip);
+    if (sh === null || hp === null) return false;
+    const el = both(LM.leftElbow, LM.rightElbow);
+    const wr = both(LM.leftWrist, LM.rightWrist);
+    // Bras tendus : poignets bien sous les épaules, hanches pas beaucoup plus bas que les épaules.
+    const straight = wr !== null && wr - sh > 0.05 && hp - sh < 0.6 * (wr - sh);
+    // Sur les avant-bras : coudes sous les épaules, poignets au niveau des coudes ou devant (plus bas
+    // à l'image), hanches au-dessus des coudes.
+    const forearms = el !== null && el - sh > 0.05 && (wr === null || wr > el - 0.05) && hp < el - 0.02 && hp - sh < 0.8 * (el - sh);
+    return straight || forearms;
   }
 }

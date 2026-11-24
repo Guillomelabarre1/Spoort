@@ -84,23 +84,34 @@ function renderEditor() {
       renderEditor();
     });
 
-    const stepper = el('div', 'mini-stepper');
-    const minus = el('button', null, '−'), plus = el('button', null, '+');
-    minus.type = plus.type = 'button';
-    minus.setAttribute('aria-label', 'Moins'); plus.setAttribute('aria-label', 'Plus');
-    const value = el('strong', null, isHold(step.exercise) ? fmtTime(step.target) : String(step.target));
-    const unit = el('small', null, isHold(step.exercise) ? 'tenu' : 'reps');
-    const bump = (dir) => {
-      const hold = isHold(step.exercise);
-      const [lo, hi] = hold ? LIMITS.hold : LIMITS.reps;
-      step.target = Math.min(hi, Math.max(lo, step.target + dir * (hold ? 5 : step.target >= 30 ? 5 : 1)));
-      renderEditor();
+    // Objectif saisi au clavier (pavé numérique sur iPhone) : répétitions, ou secondes pour un maintien.
+    const hold = isHold(step.exercise);
+    const [lo, hi] = hold ? LIMITS.hold : LIMITS.reps;
+    const stepper = el('label', 'target-input');
+    const input = el('input');
+    input.type = 'number';
+    input.inputMode = 'numeric';
+    input.pattern = '[0-9]*';
+    input.min = lo; input.max = hi;
+    input.value = String(step.target);
+    input.setAttribute('aria-label', hold ? `Secondes à tenir, exercice ${i + 1}` : `Répétitions, exercice ${i + 1}`);
+    input.addEventListener('focus', () => input.select());
+    const commit = () => {
+      const n = Math.round(Number(input.value));
+      step.target = Number.isFinite(n) && input.value !== '' ? Math.min(hi, Math.max(lo, n)) : step.target;
+      input.value = String(step.target);
+      renderSummary();
     };
-    minus.addEventListener('click', () => bump(-1));
-    plus.addEventListener('click', () => bump(1));
-    const val = el('span', 'mini-val');
-    val.append(value, unit);
-    stepper.append(minus, val, plus);
+    // Mis à jour à chaque frappe : « Lancer » ou « Enregistrer » touché sans fermer le clavier prend la valeur.
+    input.addEventListener('input', () => {
+      const n = Math.round(Number(input.value));
+      if (input.value !== '' && Number.isFinite(n)) step.target = Math.min(hi, Math.max(lo, n));
+      renderSummary();
+    });
+    input.addEventListener('change', commit);
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
+    stepper.append(input, el('small', null, hold ? 's tenues' : 'reps'));
 
     const tools = el('div', 'step-tools');
     const mk = (label, aria, fn, disabled) => {
@@ -124,6 +135,10 @@ function renderEditor() {
   });
   $('#prog-add').disabled = draft.steps.length >= LIMITS.steps;
   $('#prog-rest-value').textContent = draft.rest ? fmtTime(draft.rest) : 'aucun';
+  renderSummary();
+}
+
+function renderSummary() {
   const sum = summarize(draft, ctx.exercises());
   const parts = [`${sum.count} exercice${sum.count > 1 ? 's' : ''}`];
   if (sum.reps) parts.push(`${sum.reps} répétitions`);

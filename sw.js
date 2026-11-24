@@ -1,7 +1,7 @@
 // Service worker : l'app marche hors-ligne une fois chargée.
 // - Interface (html/js/css) : réseau d'abord, pour recevoir les mises à jour ; cache si hors-ligne.
 // - vendor/ (MediaPipe, modèles ~15-30 Mo) : cache d'abord, téléchargé une seule fois.
-const VERSION = 'v13';
+const VERSION = 'v15';
 const SHELL = `repcounter-shell-${VERSION}`;
 const VENDOR = 'repcounter-vendor-v1';
 

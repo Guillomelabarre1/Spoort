@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0c0e12">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -169,8 +169,12 @@
           <select id="model"><option value="lite">Rapide</option><option value="full">Précise (plus lente)</option></select>
         </div>
         <div class="row">
-          <label for="voice">Annonces vocales</label>
-          <input type="checkbox" id="voice" checked class="switch">
+          <label for="audio">Retour audio<small>Voix de coaching, ou seulement des sons</small></label>
+          <select id="audio"><option value="voice">Voix</option><option value="sounds">Sons</option><option value="off">Muet</option></select>
+        </div>
+        <div class="row" id="every-row">
+          <label for="every">Annoncer les répétitions</label>
+          <select id="every"><option value="1">Chacune</option><option value="2">Toutes les 2</option><option value="5">Toutes les 5</option><option value="10">Toutes les 10</option></select>
         </div>
         <div class="row">
           <label for="debug">Infos de détection<small>Affiche les mesures et envoie un diagnostic</small></label>
