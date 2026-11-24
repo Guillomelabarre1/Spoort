@@ -109,7 +109,7 @@ test('pompes : en s\'installant debout près du téléphone, la référence n\'e
   assert.equal(c.reps, 2);
 });
 
-for (const [file, expected] of [['pushup-iphone-face.json', 2], ['pushup-iphone-face-2.json', 5]])
+for (const [file, expected] of [['pushup-iphone-face.json', 2], ['pushup-iphone-face-2.json', 5], ['pushup-poignees.json', 5]])
 test(`pompes : séance réelle sur iPhone, vue de face (${file})`, () => {
   const d = JSON.parse(readFileSync(new URL(`./fixtures/${file}`, import.meta.url)));
   const c = new RepCounter('pushup');

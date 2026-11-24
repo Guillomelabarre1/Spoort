@@ -555,6 +555,11 @@ async function getLandmarker(model) {
     baseOptions: { modelAssetPath: new URL(`../vendor/pose_landmarker_${model}.task`, import.meta.url).href, delegate },
     runningMode: 'VIDEO',
     numPoses: 1,
+    // Seuils plus bas que le défaut (0,5) : en pompe de face, le corps est en partie caché et le
+    // suivi décroche trop vite. Le compteur filtre ensuite lui-même les points peu visibles.
+    minPoseDetectionConfidence: 0.35,
+    minPosePresenceConfidence: 0.35,
+    minTrackingConfidence: 0.35,
   });
   landmarker?.close();
   try {

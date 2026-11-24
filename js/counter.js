@@ -303,15 +303,19 @@ export class RepCounter {
     // Position de départ bras tendus.
     //  - plank : hanches pas beaucoup plus bas que les épaules (debout, elles sont presque au niveau des mains) ;
     //  - upright (dips) : buste droit, hanches nettement sous les épaules.
-    const start = this.det.posture === 'upright'
-      ? height > 0.05 && hipY - shoulderY > 0.4 * height
-      : height > 0.05 && hipY - shoulderY < 0.6 * height;
+    // Le seuil strict sert à apprendre la référence ; pendant la série on tolère plus de marge
+    // (pompes sur poignées : hanches un peu plus basses vues du sol), sinon la remontée n'est
+    // jamais validée et chaque pompe passe pour incomplète.
+    const ratio = (hipY - shoulderY) / height;
+    const upright = this.det.posture === 'upright';
+    const inPosition = (margin) => height > 0.05 && (upright ? ratio > 0.4 / margin : ratio < 0.6 * margin);
+    const start = inPosition(1);
     const stable = this.still.push(t, [shoulderY, wristY]);
     this.learnRef(start && stable, height, t);
     if (!this.ref) return { values: null, posture: false };
     const value = (100 * Math.max(0, height)) / this.ref;
     // En bas du mouvement la silhouette change : on n'exige la position de départ que près du haut.
-    return { values: { main: value }, posture: height > -0.05 && (start || value < this.det.extended) };
+    return { values: { main: value }, posture: height > -0.05 && (inPosition(1.5) || value < this.det.extended) };
   }
 
   /** Burpees : hauteur du corps (nez → point visible le plus bas), en % de la hauteur debout. */
