@@ -6,6 +6,7 @@ import { muscleMapSVG } from './musclemap.js';
 import { Store } from './store.js';
 import { renderBodyTab, openProfile, bindBody } from './bodyui.js';
 import { ProgramRun } from './program.js';
+import { FormCoach } from './form.js';
 import { renderPrograms, bindPrograms } from './programui.js';
 import { bindProfiles, renderLogin, avatar } from './profileui.js';
 
@@ -640,17 +641,53 @@ function setPoseState(ok) {
   chip.textContent = ok ? (session?.hold ? 'Position tenue ✓' : 'En position ✓') : 'Mise en place';
 }
 
-/** Objectif de l'étape en cours : programme, ou mode « Objectif » d'un exercice seul. */
-const targetOf = () => (session.run ? session.run.step?.target ?? null : settings.mode === 'reps' ? settings.target : null);
+/** Objectif de l'étape en cours : programme, ou mode « Objectif » d'un exercice seul. Étape chronométrée : pas d'objectif de reps. */
+const targetOf = () => (session.run ? (session.run.step?.timed ? null : session.run.step?.target ?? null) : settings.mode === 'reps' ? settings.target : null);
 const timed = () => !session.run && settings.mode === 'time';
-const fmtStep = (s) => (isHoldEx(s.exercise) ? fmtTime(s.target) : `× ${s.target}`);
-const spokenStep = (s) => `${exName(s.exercise)}, ${s.target} ${isHoldEx(s.exercise) ? 'secondes' : 'répétitions'}`;
+const stepTimed = () => !!session.run?.step?.timed;
+const fmtStep = (s) => (isHoldEx(s.exercise) ? fmtTime(s.target) : s.timed ? `${fmtTime(s.target)} max` : `× ${s.target}`);
+const spokenStep = (s) => (s.timed
+  ? `${exName(s.exercise)}, le plus possible en ${s.target} secondes`
+  : `${exName(s.exercise)}, ${s.target} ${isHoldEx(s.exercise) ? 'secondes' : 'répétitions'}`);
+/** « Tour 2/10 · 1/4 », « Tour 3 · 2/3 » (AMRAP) ou « Étape 2/5 ». */
+const stepLabel = (run) => (run.amrap ? `Tour ${run.round + 1} · ${run.slot + 1}/${run.size}`
+  : run.rounds > 1 ? `Tour ${run.round + 1}/${run.rounds} · ${run.slot + 1}/${run.size}`
+  : `Étape ${run.index + 1}/${run.length}`);
 let lastProgram = null; // pour « Recommencer »
 
 function setExercise(ex) {
   session.ex = ex;
   session.hold = ex.kind === 'hold';
   session.counter = new RepCounter(ex);
+  // Un bilan de posture par exercice, cumulé sur toutes ses séries du programme.
+  if (!session.coaches.has(ex.id)) session.coaches.set(ex.id, new FormCoach(ex));
+  session.coach = session.coaches.get(ex.id);
+}
+
+/** Bilan de posture en HTML (liste de conseils). */
+function formBlock(ex, report, compact = false) {
+  const box = el('div', `form-report ${report.verdict}`);
+  const head = el('div', 'form-head');
+  head.append(el('strong', null, compact ? ex.name : report.title));
+  if (compact) head.append(el('small', null, report.title));
+  else if (report.detail) head.append(el('small', null, report.detail));
+  box.append(head);
+  if (report.items.length) {
+    const ul = el('ul');
+    for (const it of report.items) ul.append(el('li', it.kind, it.text));
+    box.append(ul);
+  }
+  return box;
+}
+
+function renderForm(entries) {
+  const sec = $('#sum-form');
+  sec.innerHTML = '';
+  const shown = entries.map(([ex, coach]) => [ex, coach.report()]).filter(([, r]) => r.verdict !== 'none' || entries.length === 1);
+  if (!shown.length) { sec.hidden = true; return; }
+  sec.append(el('h2', 'section', 'Analyse de la posture'));
+  for (const [ex, r] of shown) sec.append(formBlock(ex, r, entries.length > 1));
+  sec.hidden = false;
 }
 
 /** Affiche l'exercice en cours (nom, compteur, objectif, étape du programme). */
@@ -667,9 +704,14 @@ function showStep() {
   $('#skip').hidden = !run;
   $('#next-up').hidden = !run;
   if (run) {
-    $('#hud-step').textContent = `Étape ${run.index + 1}/${run.program.steps.length}`;
+    $('#hud-step').textContent = stepLabel(run);
     const n = run.nextStep;
     $('#next-up').textContent = n ? `Ensuite : ${exName(n.exercise)} ${fmtStep(n)}` : 'Dernier exercice 💪';
+    if (run.step.timed) {
+      $('#count-target').textContent = `en ${fmtTime(run.step.target)}`;
+      $('#ring').removeAttribute('hidden');
+      setRing(1);
+    }
   }
   $('#hint').textContent = '';
   session.lastHint = '';
@@ -707,11 +749,13 @@ async function startWorkout(program = null) {
     lastHint: '',
     poseOk: null,
     announced: new Set(),
+    coaches: new Map(),
+    coach: null,
     diag: settings.debug ? { frames: [], startedAt: Date.now() } : null,
   };
   setExercise(exercises[run ? run.step.exercise : settings.exercise]);
   showStep();
-  $('#hud-timer').textContent = timed() ? fmtTime(settings.duration) : '0:00';
+  $('#hud-timer').textContent = timed() ? fmtTime(settings.duration) : run?.amrap ? fmtTime(program.duration) : '0:00';
 
   try {
     session.stream = await startCamera();
@@ -735,7 +779,7 @@ async function startWorkout(program = null) {
   session.state = 'countdown';
   session.countdownEnd = performance.now() + COUNTDOWN_S * 1000;
   voice.say(run
-    ? `Programme ${program.name}. Premier exercice : ${spokenStep(run.step)}. ${session.ex.setupHint}.`
+    ? `${program.name}. ${run.amrap ? `Le plus de tours possible en ${Math.round(program.duration / 60)} minutes. ` : ''}Premier exercice : ${spokenStep(run.step)}. ${session.ex.setupHint}.`
     : `${session.ex.setupHint}.`, { interrupt: true });
   loop();
 }
@@ -826,7 +870,12 @@ function loop() {
     return;
   }
 
-  if (session.state === 'active' && fresh) handleResult(session.counter.update(landmarks, now, video.videoWidth / video.videoHeight), now);
+  if (session.state === 'active' && fresh) {
+    const aspect = video.videoWidth / video.videoHeight;
+    const r = session.counter.update(landmarks, now, aspect);
+    session.coach.frame(landmarks, aspect, r);
+    handleResult(r, now);
+  }
 }
 
 function goalReached() {
@@ -876,17 +925,18 @@ function handleResult(r, now) {
 }
 
 /** Enregistre l'exercice en cours du programme (même incomplet) et passe à l'étape suivante. */
-function recordStep(now) {
+function recordStep(now, timeUp = false) {
   const { counter, run, ex } = session;
   const seconds = session.state === 'active' && session.stepStartedAt ? (now - session.stepStartedAt) / 1000 : 0;
-  run.complete({ done: counter.reps, partials: counter.partials, seconds });
+  run.complete({ done: counter.reps, partials: counter.partials, seconds, timeUp });
   if (counter.reps > 0) {
     store.addSession({ date: new Date().toISOString(), exercise: ex.id, kind: ex.kind, reps: counter.reps, partials: counter.partials, seconds: Math.round(seconds), source: 'camera', program: run.program.name });
   }
 }
 
-function stepDone(now) {
-  recordStep(now);
+function stepDone(now, timeUp = false) {
+  const doneEx = session.ex;
+  recordStep(now, timeUp);
   const { run } = session;
   if (run.finished) {
     voice.announce('Programme terminé, bravo !', 'done', { interrupt: true });
@@ -900,12 +950,18 @@ function stepDone(now) {
     session.announced.delete('rest10');
     $('#rest-time').textContent = fmtTime(run.program.rest);
     $('#rest-next').textContent = `Prochain : ${exName(run.step.exercise)} ${fmtStep(run.step)}`;
+    // Retour écrit sur l'exercice qui vient de se terminer.
+    const f = session.coaches.get(doneEx.id)?.report();
+    const tip = f?.items.find((i) => i.kind === 'tip');
+    $('#rest-form').textContent = !f || f.verdict === 'none' ? '' : tip ? `${doneEx.name} : ${tip.text}` : `${doneEx.name} : ${f.title}`;
+    $('#rest-form').className = `rest-form ${f?.verdict ?? ''}`;
     $('#rest').hidden = false;
     $('#workout').classList.add('resting');
     voice.announce(`Repos. Prochain exercice : ${spokenStep(run.step)}.`, 'rest', { interrupt: true });
   } else {
     beginStepCountdown(now);
   }
+  if (run.amrap && run.slot === 0) voice.say(`Tour ${run.round + 1}`);
 }
 
 function endRest(now) {
@@ -924,6 +980,35 @@ function beginStepCountdown(now) {
 }
 
 function updateTimer(elapsed) {
+  const run = session.run;
+  // Étape chronométrée (« le plus possible en 30 s ») : compte à rebours de l'étape.
+  if (run && stepTimed() && session.state === 'active') {
+    const target = run.step.target;
+    const left = target - (performance.now() - session.stepStartedAt) / 1000;
+    setRing(left / target);
+    $('#count-target').textContent = `encore ${fmtTime(Math.max(0, Math.ceil(left)))}`;
+    if (target > 15 && left <= 5 && !session.announced.has(`s5-${run.index}`)) {
+      session.announced.add(`s5-${run.index}`);
+      voice.announce('5 secondes', 'tick');
+    }
+    if (left <= 0) { voice.cue('milestone'); stepDone(performance.now(), true); return; }
+  }
+  if (run?.amrap) {
+    const left = run.program.duration - elapsed;
+    $('#hud-timer').textContent = fmtTime(Math.max(0, Math.ceil(left)));
+    for (const [at, msg] of [[60, 'Plus qu\'une minute'], [10, '10 secondes']]) {
+      if (run.program.duration > at + 30 && left <= at && !session.announced.has(`a${at}`)) {
+        session.announced.add(`a${at}`);
+        voice.announce(msg, 'tick', { interrupt: true });
+      }
+    }
+    if (left <= 0) {
+      const rep = (recordIfActive(), run.report(exercises));
+      voice.announce(`Temps écoulé. ${rep.rounds} tour${rep.rounds > 1 ? 's' : ''}${rep.extra ? ` et ${rep.extra} répétitions` : ''}.`, 'done', { interrupt: true });
+      finishWorkout('Temps écoulé !');
+    }
+    return;
+  }
   if (timed()) {
     const left = settings.duration - elapsed;
     $('#hud-timer').textContent = fmtTime(Math.ceil(left));
@@ -986,6 +1071,7 @@ function finishWorkout(title = 'Bravo !') {
   const p = hold ? null : pace(reps, seconds);
   $('#sum-pace').textContent = p ? p.toFixed(0) : '—';
   $('#sum-partials').textContent = partials;
+  renderForm(wasActive ? [[ex, session.coach]] : []);
   const diff = last ? reps - last.reps : 0;
   $('#sum-compare').textContent = reps === 0
     ? (hold ? 'Position non détectée. Vérifie le placement du téléphone.' : 'Aucune répétition détectée. Vérifie le placement du téléphone.')
@@ -997,9 +1083,18 @@ function finishWorkout(title = 'Bravo !') {
 }
 
 /** Fin d'un programme (terminé ou arrêté) : bilan étape par étape. */
+/** Garde l'exercice entamé (même incomplet) au moment d'arrêter ou quand le temps est écoulé. */
+function recordIfActive() {
+  const { run } = session;
+  if (!run.finished && session.state === 'active' && session.counter.reps > 0 && !session.recorded) {
+    recordStep(performance.now());
+    session.recorded = true;
+  }
+}
+
 function finishProgram(title, now) {
   const { run } = session;
-  if (!run.finished && session.state === 'active' && session.counter.reps > 0) recordStep(now);
+  recordIfActive();
   const seconds = session.startedAt ? (now - session.startedAt) / 1000 : 0;
   session.state = 'done';
   stopMedia();
@@ -1009,32 +1104,52 @@ function finishProgram(title, now) {
   $('#workout').classList.remove('resting');
 
   const rep = run.report(exercises);
-  const all = rep.completed === rep.total;
+  const all = run.amrap ? title === 'Temps écoulé !' : rep.completed === rep.total;
   $('#summary-exercise').textContent = run.program.name;
   $('#summary-title').textContent = all ? title : 'Programme arrêté';
   $('#sum-record').hidden = true;
-  $('#sum-reps').textContent = rep.reps;
-  $('#sum-reps').nextElementSibling.textContent = 'répétitions au total';
+  if (run.amrap) {
+    $('#sum-reps').textContent = rep.rounds;
+    $('#sum-reps').nextElementSibling.textContent = `tour${rep.rounds > 1 ? 's' : ''}${rep.extra ? ` + ${rep.extra} rép.` : ''} en ${fmtTime(run.program.duration)}`;
+  } else {
+    $('#sum-reps').textContent = rep.reps;
+    $('#sum-reps').nextElementSibling.textContent = 'répétitions au total';
+  }
   $('#sum-time').textContent = fmtTime(seconds);
   const p = pace(rep.reps, seconds);
   $('#sum-pace').textContent = p ? p.toFixed(0) : '—';
   $('#sum-partials').textContent = run.results.reduce((s, r) => s + r.partials, 0);
-  $('#sum-compare').textContent = `${rep.completed}/${rep.total} exercice${rep.total > 1 ? 's' : ''} réussi${rep.total > 1 ? 's' : ''}`;
+  $('#sum-compare').textContent = run.amrap
+    ? `${rep.reps} répétitions au total`
+    : `${rep.completed}/${rep.total} exercice${rep.total > 1 ? 's' : ''} réussi${rep.total > 1 ? 's' : ''}`;
 
   const list = $('#sum-steps');
   list.innerHTML = '';
-  run.program.steps.forEach((step, i) => {
+  if (run.amrap || run.rounds > 1) {
+    // Plusieurs tours : un total par exercice du tour.
+    for (const { step, done, times } of run.perSlot()) {
+      const li = el('li');
+      const what = el('span', 'what');
+      const hold = isHoldEx(step.exercise);
+      what.append(el('span', null, exName(step.exercise)), el('small', null, `${fmtStep(step)} · fait ${times} fois`));
+      li.append(icon(exercises[step.exercise]?.icon ?? 'custom'), what, el('strong', done > 0 ? 'ok' : 'ko', hold ? fmtTime(done) : `${done} rép.`));
+      list.append(li);
+    }
+  } else run.program.steps.forEach((step, i) => {
     const r = run.results[i];
     const li = el('li');
     const what = el('span', 'what');
     const hold = isHoldEx(step.exercise);
     const v = (n) => (hold ? fmtTime(n) : String(n));
     what.append(el('span', null, exName(step.exercise)), el('small', null, r ? (r.seconds ? `${fmtTime(r.seconds)}` : 'passé') : 'non fait'));
-    const score = el('strong', r && !r.skipped ? 'ok' : 'ko', r ? `${v(r.done)}/${v(step.target)}${r.skipped ? '' : ' ✓'}` : `${v(0)}/${v(step.target)}`);
+    const score = step.timed
+      ? el('strong', r && !r.skipped ? 'ok' : 'ko', r ? `${r.done} rép.${r.skipped ? '' : ' ✓'}` : '—')
+      : el('strong', r && !r.skipped ? 'ok' : 'ko', r ? `${v(r.done)}/${v(step.target)}${r.skipped ? '' : ' ✓'}` : `${v(0)}/${v(step.target)}`);
     li.append(icon(exercises[step.exercise]?.icon ?? 'custom'), what, score);
     list.append(li);
   });
   list.hidden = false;
+  renderForm([...session.coaches].map(([id, coach]) => [exercises[id] ?? coach.ex, coach]));
   session = null;
   renderAll();
   showScreen('summary');

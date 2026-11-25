@@ -406,3 +406,32 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 .pin-keys button:active { background: var(--line); }
 .pin-keys button[data-k="del"] { background: none; font-size: 26px; color: var(--muted); }
 #pin-cancel { margin-top: 18px; }
+
+/* ---------- Séances toutes prêtes, objectifs de temps ---------- */
+.lib-card { background: linear-gradient(135deg, #38bdf826, transparent 60%), var(--surface); }
+.lib-card small { color: #7dd3fc; }
+.prog-goal { display: flex; }
+.prog-goal .target-input small { font-size: 13px; }
+.unit-toggle { height: 40px; min-width: 58px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--accent); font: inherit; font-size: 13px; font-weight: 700; }
+#prog-source a { color: var(--accent); }
+
+/* ---------- Analyse de la posture ---------- */
+.sum-form { margin: 0 0 22px; }
+.sum-form .section { margin-top: 0; }
+.form-report { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; }
+.form-report.ok { border-left-color: #facc15; }
+.form-report.work { border-left-color: #fb923c; }
+.form-report.none { border-left-color: var(--line); }
+.form-head strong { display: block; font-size: 16px; }
+.form-head small { color: var(--muted); font-size: 13px; }
+.form-report ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.form-report li { position: relative; padding-left: 22px; font-size: 14px; line-height: 1.4; }
+.form-report li::before { position: absolute; left: 0; top: 0; font-weight: 800; }
+.form-report li.tip::before { content: '→'; color: #fb923c; }
+.form-report li.good::before { content: '✓'; color: var(--accent); }
+.form-report li.info::before { content: 'i'; color: var(--muted); font-style: italic; left: 4px; }
+.form-report li.info { color: var(--muted); }
+.rest-form { max-width: 420px; margin: 0 0 16px; font-size: 15px; line-height: 1.4; color: var(--muted); }
+.rest-form:empty { display: none; }
+.rest-form.work, .rest-form.ok { color: #fde68a; }
+.rest-form.good { color: var(--accent); }

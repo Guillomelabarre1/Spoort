@@ -2,6 +2,7 @@
 
 import { CATEGORIES } from './exercises.js';
 import { normalizeProgram, summarize, REST_DEFAULT, LIMITS } from './program.js';
+import { LIBRARY } from './library.js';
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -11,7 +12,38 @@ let ctx = null;   // { store, exercises(), openSheet, closeSheets, showError, on
 let draft = null; // programme en cours d'édition (copie)
 
 const isHold = (id) => ctx.exercises()[id]?.kind === 'hold';
-const fmtTarget = (s) => (isHold(s.exercise) ? fmtTime(s.target) : `×${s.target}`);
+const fmtTarget = (s) => (isHold(s.exercise) ? fmtTime(s.target) : s.timed ? `${s.target} s` : `×${s.target}`);
+/** « 3 exercices · ~12 min », « Max de tours · 20 min », « 10 tours · ~30 min ». */
+const cardLine = (prog, sum) => (sum.amrap ? `Max de tours · ${sum.minutes} min`
+  : `${sum.rounds > 1 ? `${sum.rounds} tours` : `${sum.count} exercice${sum.count > 1 ? 's' : ''}`} · ~${sum.minutes} min`);
+
+function programCard(prog, extra) {
+  const exercises = ctx.exercises();
+  const sum = summarize(prog, exercises);
+  const card = el('button', 'prog-card');
+  card.type = 'button';
+  card.append(
+    el('strong', null, prog.name),
+    el('small', null, extra ? `${extra} · ${cardLine(prog, sum)}` : cardLine(prog, sum)),
+    el('span', 'prog-steps', prog.steps.slice(0, 3).map((s) => `${exercises[s.exercise].name} ${fmtTarget(s)}`).join(' · ') + (prog.steps.length > 3 ? ' …' : '')),
+  );
+  return card;
+}
+
+/** Séances toutes prêtes (js/library.js) : on les ouvre dans l'éditeur, comme un nouveau programme. */
+function renderLibrary() {
+  const box = $('#library-list');
+  if (!box) return;
+  box.innerHTML = '';
+  for (const lib of LIBRARY) {
+    const prog = normalizeProgram(lib, ctx.exercises());
+    if (prog.steps.length !== lib.steps.length) continue; // exercice manquant
+    const card = programCard(prog, lib.level);
+    card.classList.add('lib-card');
+    card.addEventListener('click', () => openEditor(lib, { library: true }));
+    box.append(card);
+  }
+}
 const defaultTarget = (id) => (isHold(id) ? 30 : 15);
 
 export function renderPrograms() {
@@ -20,14 +52,7 @@ export function renderPrograms() {
   const box = $('#program-list');
   box.innerHTML = '';
   for (const p of ctx.store.programs) {
-    const prog = normalizeProgram(p, exercises);
-    const sum = summarize(prog, exercises);
-    const card = el('button', 'prog-card');
-    card.append(
-      el('strong', null, prog.name),
-      el('small', null, `${sum.count} exercice${sum.count > 1 ? 's' : ''} · ~${sum.minutes} min`),
-      el('span', 'prog-steps', prog.steps.slice(0, 3).map((s) => `${exercises[s.exercise].name} ${fmtTarget(s)}`).join(' · ') + (prog.steps.length > 3 ? ' …' : '')),
-    );
+    const card = programCard(normalizeProgram(p, exercises));
     card.addEventListener('click', () => openEditor(p));
     box.append(card);
   }
@@ -35,15 +60,28 @@ export function renderPrograms() {
   add.append(el('strong', null, '+ Nouveau programme'), el('small', null, 'Enchaîne plusieurs exercices'));
   add.addEventListener('click', () => openEditor(null));
   box.append(add);
+  renderLibrary();
 }
 
-function openEditor(program) {
+function openEditor(program, { library = false } = {}) {
   const exercises = ctx.exercises();
   draft = program
     ? structuredClone(normalizeProgram(program, exercises))
-    : { name: '', rest: REST_DEFAULT, steps: [{ exercise: 'pushup', target: 15 }, { exercise: 'squat', target: 20 }] };
-  $('#prog-title').textContent = program ? 'Avant de lancer' : 'Nouveau programme';
+    : normalizeProgram({ name: '', rest: REST_DEFAULT, steps: [{ exercise: 'pushup', target: 15 }, { exercise: 'squat', target: 20 }] }, exercises);
+  if (!program) draft.name = '';
+  if (library) delete draft.id; // copie : enregistrer crée un programme à soi
+  $('#prog-title').textContent = library ? 'Séance toute prête' : program ? 'Avant de lancer' : 'Nouveau programme';
   $('#prog-name').value = draft.name;
+  const src = $('#prog-source');
+  src.innerHTML = '';
+  const note = library ? program.note : '';
+  if (note) src.append(el('span', null, note + ' '));
+  if (draft.source?.url) {
+    const a = el('a', null, `Source : ${draft.source.name}`);
+    a.href = draft.source.url; a.target = '_blank'; a.rel = 'noopener';
+    src.append(a);
+  }
+  src.hidden = !src.childNodes.length;
   $('#prog-delete').hidden = !draft.id;
   $('#prog-save').textContent = draft.id ? 'Enregistrer les modifications' : 'Enregistrer le programme';
   renderEditor();
@@ -80,13 +118,15 @@ function renderEditor() {
     select.addEventListener('change', () => {
       const wasHold = isHold(step.exercise);
       step.exercise = select.value;
+      if (isHold(step.exercise)) delete step.timed;
       if (wasHold !== isHold(step.exercise)) step.target = defaultTarget(step.exercise);
       renderEditor();
     });
 
     // Objectif saisi au clavier (pavé numérique sur iPhone) : répétitions, ou secondes pour un maintien.
     const hold = isHold(step.exercise);
-    const [lo, hi] = hold ? LIMITS.hold : LIMITS.reps;
+    const secs = hold || step.timed;
+    const [lo, hi] = secs ? LIMITS.hold : LIMITS.reps;
     const stepper = el('label', 'target-input');
     const input = el('input');
     input.type = 'number';
@@ -94,7 +134,7 @@ function renderEditor() {
     input.pattern = '[0-9]*';
     input.min = lo; input.max = hi;
     input.value = String(step.target);
-    input.setAttribute('aria-label', hold ? `Secondes à tenir, exercice ${i + 1}` : `Répétitions, exercice ${i + 1}`);
+    input.setAttribute('aria-label', hold ? `Secondes à tenir, exercice ${i + 1}` : step.timed ? `Durée en secondes, exercice ${i + 1}` : `Répétitions, exercice ${i + 1}`);
     input.addEventListener('focus', () => input.select());
     const commit = () => {
       const n = Math.round(Number(input.value));
@@ -111,7 +151,22 @@ function renderEditor() {
     input.addEventListener('change', commit);
     input.addEventListener('blur', commit);
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
-    stepper.append(input, el('small', null, hold ? 's tenues' : 'reps'));
+    stepper.append(input);
+    if (hold) stepper.append(el('small', null, 's tenues'));
+    else {
+      // Exercice à répétitions : objectif en nombre, ou « le plus possible en X secondes ».
+      const unit = el('button', 'unit-toggle', step.timed ? 's max' : 'reps');
+      unit.type = 'button';
+      unit.setAttribute('aria-label', step.timed ? 'Passer en nombre de répétitions' : 'Passer en durée (le plus possible)');
+      unit.addEventListener('click', (e) => {
+        e.preventDefault();
+        step.timed = !step.timed;
+        step.target = step.timed ? 30 : 15;
+        if (!step.timed) delete step.timed;
+        renderEditor();
+      });
+      stepper.append(unit);
+    }
 
     const tools = el('div', 'step-tools');
     const mk = (label, aria, fn, disabled) => {
@@ -135,15 +190,27 @@ function renderEditor() {
   });
   $('#prog-add').disabled = draft.steps.length >= LIMITS.steps;
   $('#prog-rest-value').textContent = draft.rest ? fmtTime(draft.rest) : 'aucun';
+  const amrap = draft.mode === 'amrap';
+  for (const r of document.querySelectorAll('input[name="prog-mode"]')) r.checked = r.value === draft.mode;
+  $('#prog-rounds-row').hidden = amrap;
+  $('#prog-duration-row').hidden = !amrap;
+  if (document.activeElement !== $('#prog-rounds')) $('#prog-rounds').value = String(draft.rounds ?? 1);
+  if (document.activeElement !== $('#prog-duration')) $('#prog-duration').value = String(Math.round((draft.duration ?? 1200) / 60));
   renderSummary();
 }
 
 function renderSummary() {
   const sum = summarize(draft, ctx.exercises());
   const parts = [`${sum.count} exercice${sum.count > 1 ? 's' : ''}`];
-  if (sum.reps) parts.push(`${sum.reps} répétitions`);
-  if (sum.hold) parts.push(`${fmtTime(sum.hold)} de maintien`);
-  parts.push(`~${sum.minutes} min`);
+  if (sum.amrap) {
+    if (sum.perRound) parts.push(`${sum.perRound} répétitions par tour`);
+    parts.push(`le plus de tours possible en ${sum.minutes} min`);
+  } else {
+    if (sum.rounds > 1) parts.push(`${sum.rounds} tours`);
+    if (sum.reps) parts.push(`${sum.reps} répétitions`);
+    if (sum.hold) parts.push(`${fmtTime(sum.hold)} chronométrées`);
+    parts.push(`~${sum.minutes} min`);
+  }
   $('#prog-summary').textContent = parts.join(' · ');
 }
 
@@ -154,6 +221,22 @@ function current() {
 
 export function bindPrograms(helpers) {
   ctx = helpers;
+  for (const r of document.querySelectorAll('input[name="prog-mode"]')) {
+    r.addEventListener('change', () => {
+      draft.mode = r.value;
+      if (draft.mode === 'amrap') { draft.duration ??= 1200; draft.rounds = 1; }
+      renderEditor();
+    });
+  }
+  const numberField = (sel, apply) => {
+    const input = $(sel);
+    input.addEventListener('focus', () => input.select());
+    input.addEventListener('input', () => { const n = Math.round(Number(input.value)); if (input.value !== '' && Number.isFinite(n)) { apply(n); renderSummary(); } });
+    input.addEventListener('blur', () => renderEditor());
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
+  };
+  numberField('#prog-rounds', (n) => { draft.rounds = Math.min(LIMITS.rounds[1], Math.max(LIMITS.rounds[0], n)); });
+  numberField('#prog-duration', (n) => { draft.duration = Math.min(LIMITS.duration[1], Math.max(LIMITS.duration[0], n * 60)); });
   $('#prog-add').addEventListener('click', () => {
     const last = draft.steps.at(-1);
     draft.steps.push(last ? { ...last } : { exercise: 'pushup', target: 15 });

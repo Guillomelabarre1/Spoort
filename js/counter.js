@@ -104,6 +104,18 @@ class RepMachine {
     this.minValue = Infinity;
     this.repStartedAt = null;
     this.reachedTop = false;
+    this.low = Infinity; this.lowAt = null; this.high = -Infinity;
+    this.last = null; // dernière répétition (ou incomplète) : { low, high, ms, downMs }
+  }
+
+  /** Clôt la répétition en cours : amplitude atteinte, haut de départ et rythme (pour le bilan de posture). */
+  close(t, started) {
+    this.last = {
+      low: this.low, high: this.high,
+      ms: started !== null ? t - started : null,
+      downMs: started !== null && this.lowAt !== null ? this.lowAt - started : null,
+    };
+    this.low = Infinity; this.lowAt = null; this.high = this.value;
   }
 
   /** Renvoie 'rep', 'partial' ou null. `topCheck()` : condition supplémentaire en bas du mouvement. */
@@ -111,9 +123,13 @@ class RepMachine {
     this.value = this.value === null ? raw : this.smoothing * this.value + (1 - this.smoothing) * raw;
     const v = this.value;
     const { extended, flexed, partial } = this;
+    if (this.phase !== 'waiting') {
+      if (v < this.low) { this.low = v; this.lowAt = t; }
+      if (v > this.high) this.high = v;
+    }
     switch (this.phase) {
       case 'waiting':
-        if (v >= extended) this.phase = 'up';
+        if (v >= extended) { this.phase = 'up'; this.high = v; }
         return null;
       case 'up':
         if (v < extended) this.minValue = Math.min(this.minValue, v);
@@ -122,10 +138,12 @@ class RepMachine {
           this.repStartedAt ??= t;
           this.reachedTop = topCheck ? topCheck() : true;
         } else if (v >= extended && this.minValue <= partial) {
+          this.close(t, this.repStartedAt);
           this.minValue = Infinity;
           this.repStartedAt = null;
           return 'partial'; // redescendu sans atteindre le seuil
         } else if (v >= extended) {
+          if (this.minValue < Infinity) { this.low = Infinity; this.lowAt = null; } // simple oscillation en haut
           this.minValue = Infinity;
           this.repStartedAt = null;
         } else if (this.repStartedAt === null) {
@@ -137,6 +155,7 @@ class RepMachine {
         if (v < extended) return null;
         const tooFast = this.repStartedAt !== null && t - this.repStartedAt < this.minRepMs;
         const event = !this.reachedTop ? 'partial' : tooFast ? null : 'rep';
+        if (event) this.close(t, this.repStartedAt);
         this.phase = 'up';
         this.minValue = Infinity;
         this.repStartedAt = null;
@@ -204,7 +223,7 @@ export class RepCounter {
    * Retourne { reps, phase, angle, valid, event: 'rep' | 'partial' | 'tick' | null, hint, side, raw, posture, score }.
    */
   update(lm, t, aspect = 1) {
-    this.diag = { side: null, raw: null, posture: null, score: null };
+    this.diag = { side: null, raw: null, posture: null, score: null, rep: null };
     const out = (valid, event = null, hint = null) => ({
       reps: this.reps, phase: this.phase, angle: this.angle, valid, event, hint, ...this.diag,
     });
@@ -235,9 +254,10 @@ export class RepCounter {
     let event = null;
     const topCheck = this.det.topCheck ? () => TOP_CHECKS[this.det.topCheck](lm) : null;
     for (const [key, value] of Object.entries(m.values)) {
-      const e = this.machine(key).feed(value, t, topCheck);
-      if (e === 'rep') { this.reps += 1; event = 'rep'; }
-      else if (e === 'partial') { this.partials += 1; event ??= 'partial'; }
+      const mc = this.machine(key);
+      const e = mc.feed(value, t, topCheck);
+      if (e === 'rep') { this.reps += 1; event = 'rep'; this.diag.rep = { ...mc.last, partial: false }; }
+      else if (e === 'partial') { this.partials += 1; event ??= 'partial'; this.diag.rep ??= { ...mc.last, partial: true }; }
     }
     const hint = event === 'partial' ? this.ex.partialHint
       : this.phase === 'waiting' ? this.ex.setupHint : null;

@@ -72,8 +72,11 @@
 
       <div class="week" id="week" aria-label="Cette semaine"></div>
 
-      <h2 class="section">Programmes</h2>
+      <h2 class="section">Mes programmes</h2>
       <div class="prog-list" id="program-list"></div>
+
+      <h2 class="section">Séances toutes prêtes</h2>
+      <div class="prog-list" id="library-list"></div>
 
       <h2 class="section">Exercice seul</h2>
       <div id="exercise-groups"></div>
@@ -270,6 +273,7 @@
       <p class="eyebrow">Repos</p>
       <div id="rest-time">0:30</div>
       <p id="rest-next"></p>
+      <p id="rest-form" class="rest-form"></p>
       <button id="rest-skip" class="secondary">Passer le repos</button>
     </div>
     <div class="hud bottom">
@@ -294,6 +298,7 @@
       <div class="big"><strong id="sum-reps">0</strong><span>répétitions</span></div>
       <p class="muted center" id="sum-compare"></p>
       <ul id="sum-steps" class="history sum-steps" hidden></ul>
+      <section id="sum-form" class="sum-form" hidden></section>
       <div class="stats">
         <div><strong id="sum-time">0:00</strong><span>durée</span></div>
         <div><strong id="sum-pace">—</strong><span>reps / min</span></div>
@@ -377,6 +382,15 @@
     <form class="sheet-body" id="program-form">
       <div class="sheet-head"><h2 id="prog-title">Programme</h2><button type="button" class="icon-btn" data-close aria-label="Fermer"><svg><use href="#i-close"/></svg></button></div>
       <label class="field">Nom<input id="prog-name" maxlength="40" placeholder="Ex. : Haut du corps"></label>
+      <p class="tip" id="prog-source" hidden></p>
+      <div class="segmented two-seg" id="prog-mode">
+        <label><input type="radio" name="prog-mode" value="sets" checked><span>Enchaînement</span></label>
+        <label><input type="radio" name="prog-mode" value="amrap"><span>Max de tours</span></label>
+      </div>
+      <div class="prog-goal">
+        <label class="target-input" id="prog-rounds-row"><input id="prog-rounds" type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="20" aria-label="Nombre de tours"><small>tour(s) de la liste</small></label>
+        <label class="target-input" id="prog-duration-row" hidden><input id="prog-duration" type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="120" aria-label="Durée en minutes"><small>minutes : le plus de tours possible</small></label>
+      </div>
       <ol id="prog-steps" class="prog-steps-edit"></ol>
       <button type="button" id="prog-add" class="ghost" style="margin-top:0"><svg><use href="#i-plus"/></svg>Ajouter un exercice</button>
       <div class="stepper rest-stepper">

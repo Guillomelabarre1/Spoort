@@ -31,3 +31,46 @@ test('programme : déroulé étape par étape, étape passée = incomplète', ()
   assert.deepEqual(run.results.map((r) => r.skipped), [false, true, false]);
   assert.deepEqual(run.report(CATALOG), { completed: 2, total: 3, reps: 25 });
 });
+
+test('AMRAP : la liste tourne en boucle, score = tours complets + répétitions du tour entamé', () => {
+  const p = normalizeProgram({ mode: 'amrap', duration: 1200, steps: [{ exercise: 'pushup', target: 10 }, { exercise: 'squat', target: 20 }, { exercise: 'burpee', target: 10 }] }, CATALOG);
+  assert.equal(p.rest, 0); // pas de repos par défaut
+  const run = new ProgramRun(p);
+  for (let i = 0; i < 6; i++) run.complete({ done: run.step.target });
+  assert.equal(run.round, 2);
+  assert.equal(run.step.exercise, 'pushup');
+  assert.ok(!run.finished && !run.isLast);
+  run.complete({ done: 10 });
+  run.complete({ done: 12 }); // temps écoulé pendant les squats
+  assert.deepEqual([run.report(CATALOG).rounds, run.report(CATALOG).extra, run.report(CATALOG).reps], [2, 22, 102]);
+  assert.deepEqual(run.perSlot().map((x) => x.done), [30, 52, 20]);
+  const sum = summarize(p, CATALOG);
+  assert.deepEqual([sum.amrap, sum.minutes, sum.perRound], [true, 20, 40]);
+});
+
+test('programme en plusieurs tours et étapes chronométrées (« le plus possible en 30 s »)', () => {
+  const p = normalizeProgram({ rounds: 3, rest: 10, steps: [{ exercise: 'squat', target: 20, timed: true }, { exercise: 'plank', target: 30, timed: true }] }, CATALOG);
+  assert.deepEqual(p.steps, [{ exercise: 'squat', target: 20, timed: true }, { exercise: 'plank', target: 30 }]); // le gainage est déjà en secondes
+  const run = new ProgramRun(p);
+  assert.equal(run.length, 6);
+  run.complete({ done: 14, timeUp: true });  // 14 squats en 20 s : réussi
+  run.complete({ done: 30 });
+  run.complete({ done: 9 });                 // passé avant la fin du temps
+  assert.deepEqual(run.results.map((r) => r.skipped), [false, false, true]);
+  assert.equal(run.round, 1);
+  while (!run.finished) run.complete({ done: 30, timeUp: true });
+  assert.equal(run.report(CATALOG).total, 6);
+  const sum = summarize(p, CATALOG);
+  assert.equal(sum.hold, 150); // (20 + 30) × 3
+});
+
+test('séances toutes prêtes : exercices connus, rien de perdu au nettoyage', async () => {
+  const { LIBRARY } = await import('../js/library.js');
+  assert.ok(LIBRARY.length >= 6);
+  for (const lib of LIBRARY) {
+    const p = normalizeProgram(lib, CATALOG);
+    assert.equal(p.steps.length, lib.steps.length, lib.key);
+    assert.equal(p.mode, lib.mode, lib.key);
+    if (lib.source) assert.match(lib.source.url, /^https:\/\//);
+  }
+});
